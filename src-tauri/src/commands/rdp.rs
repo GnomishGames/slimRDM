@@ -126,8 +126,11 @@ pub async fn rdp_disconnect(session_id: String) -> std::result::Result<(), Strin
     // For xfreerdp we can kill the process.
     #[cfg(not(target_os = "windows"))]
     {
-        let mut procs = RDP_PROCS.lock().unwrap();
-        if let Some(mut child) = procs.remove(&session_id) {
+        let child = {
+            let mut procs = RDP_PROCS.lock().unwrap();
+            procs.remove(&session_id)
+        };
+        if let Some(mut child) = child {
             let _ = child.kill().await;
         }
     }

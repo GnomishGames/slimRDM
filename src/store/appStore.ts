@@ -32,7 +32,7 @@ interface AppState {
   setSelectedGroup: (id: string | null) => void;
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>((set) => ({
   connections: [],
   groups: [],
   sessions: [],

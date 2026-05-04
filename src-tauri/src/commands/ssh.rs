@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
 use serde::{Deserialize, Serialize};
 
-use crate::store::{AuthType, now_ts};
+use crate::store::AuthType;
 
 /// Shared map of session_id -> input sender
 type SshSessions = Arc<Mutex<HashMap<String, mpsc::UnboundedSender<SshInput>>>>;
@@ -182,7 +182,7 @@ async fn run_ssh_session(
     }
 
     // Open a PTY channel
-    let mut channel = session.channel_open_session()
+    let channel = session.channel_open_session()
         .await
         .map_err(|e| format!("Channel open failed: {}", e))?;
 

@@ -1,5 +1,4 @@
 use crate::store::{Group, new_id};
-use crate::error::SlimError;
 use super::connections::{load_store, save_store};
 
 #[tauri::command]

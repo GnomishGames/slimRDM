@@ -32,18 +32,16 @@ anyhow = "1"
 thiserror = "1"
 keyring = "2"
 base64 = "0.22"
+async-trait = "0.1"
+lazy_static = "1"
 
 # SSH
 russh = "0.44"
 russh-keys = "0.44"
 
-# RDP
-ironrdp-client = { version = "0.1", optional = true }
-
 [features]
 default = ["ssh"]
 ssh = []
-rdp = ["ironrdp-client"]
 
 [profile.release]
 panic = "abort"

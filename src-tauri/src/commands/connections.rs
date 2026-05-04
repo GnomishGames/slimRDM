@@ -1,4 +1,3 @@
-use tauri::State;
 use tauri_plugin_store::StoreExt;
 use serde_json::json;
 
@@ -7,7 +6,7 @@ use crate::error::{SlimError, Result};
 
 const STORE_KEY: &str = "data";
 
-fn load_store(app: &tauri::AppHandle) -> Result<AppStore> {
+pub(super) fn load_store(app: &tauri::AppHandle) -> Result<AppStore> {
     let store = app.store("slimrdm.json")
         .map_err(|e| SlimError::StoreError(e.to_string()))?;
     let data = store.get(STORE_KEY);
@@ -18,7 +17,7 @@ fn load_store(app: &tauri::AppHandle) -> Result<AppStore> {
     }
 }
 
-fn save_store(app: &tauri::AppHandle, data: &AppStore) -> Result<()> {
+pub(super) fn save_store(app: &tauri::AppHandle, data: &AppStore) -> Result<()> {
     let store = app.store("slimrdm.json")
         .map_err(|e| SlimError::StoreError(e.to_string()))?;
     store.set(STORE_KEY, json!(data));

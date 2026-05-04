@@ -3,7 +3,6 @@ mod session;
 mod store;
 mod error;
 
-use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()

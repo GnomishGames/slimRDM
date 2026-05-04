@@ -1,20 +1,18 @@
 import { useState } from "react";
 import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, Folder, Settings } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
-import { Connection, Group } from "../../types";
-import { invoke } from "@tauri-apps/api/core";
+import { Connection } from "../../types";
 import { credentials } from "../../utils/tauri";
 import clsx from "clsx";
 
 export function Sidebar() {
   const {
     connections, groups, searchQuery,
-    setSearchQuery, selectedGroupId, setSelectedGroup,
-    openSession, deleteConnection,
+    setSearchQuery, openSession, deleteConnection,
   } = useAppStore();
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [_showAddModal, setShowAddModal] = useState(false);
 
   const toggleGroup = (id: string) => {
     setExpandedGroups((prev) => {
