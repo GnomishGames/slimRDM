@@ -34,13 +34,14 @@ function SshPanel({ session, active }: Props) {
     const init = async () => {
       let password: string | undefined;
       if (session.connection.authType === "password" && session.connection.credentialRef) {
-        try {
-          password = await credentials.get(session.connection.credentialRef);
-        } catch {}
+        password = await credentials.get(session.connection.credentialRef).catch((e) => {
+          console.error("credential fetch failed:", e);
+          return undefined;
+        });
       }
       await connect(password);
     };
-    init();
+    init().catch(console.error);
   }, []);
 
   return (

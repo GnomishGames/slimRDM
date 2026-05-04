@@ -450,6 +450,198 @@ kbd {
   color: var(--text-secondary);
 }
 
+/* ── Modal ───────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 420px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+/* Fields */
+.field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-row--grow { flex: 1; }
+
+.field-row-group {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.field-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-error {
+  color: var(--red);
+  font-weight: 400;
+}
+
+.field-input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.1s;
+}
+
+.field-input:focus { border-color: var(--accent); }
+.field-input--error { border-color: var(--red); }
+.field-input::placeholder { color: var(--text-muted); }
+
+.field-textarea {
+  resize: vertical;
+  font-family: var(--font-ui);
+  min-height: 52px;
+}
+
+/* Type toggle */
+.type-toggle {
+  display: flex;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.type-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  transition: background 0.1s, color 0.1s;
+}
+
+.type-btn--active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Auth tabs */
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.auth-tab {
+  padding: 4px 10px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--font-ui);
+  transition: all 0.1s;
+}
+
+.auth-tab--active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.form-error {
+  font-size: 12px;
+  color: var(--red);
+  background: rgba(255,123,114,0.1);
+  border: 1px solid rgba(255,123,114,0.3);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+
+/* Buttons */
+.btn {
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  transition: all 0.1s;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: #0d1117;
+}
+
+.btn--primary:hover { background: #79c0ff; }
+.btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn--ghost {
+  background: none;
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.btn--ghost:hover { background: var(--bg-elevated); color: var(--text-primary); }
+
 /* ── Shared Buttons ─────────────────────────────────── */
 .icon-btn {
   display: flex;

@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { listen } from "@tauri-apps/api/event";
+import { UnlistenFn, listen } from "@tauri-apps/api/event";
 import { ssh } from "../utils/tauri";
 import { useAppStore } from "../store/appStore";
 import { Connection } from "../types";
@@ -16,19 +16,9 @@ interface UseSshTerminalOptions {
 export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTerminalOptions) {
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  // Store listener promises so connect() can await them before invoking SSH
+  const listenersRef = useRef<Promise<UnlistenFn>[]>([]);
   const setSessionStatus = useAppStore((s) => s.setSessionStatus);
-
-  const connect = useCallback(async (password?: string) => {
-    await ssh.connect({
-      sessionId,
-      host: connection.host,
-      port: connection.port,
-      username: connection.username,
-      authType: connection.authType,
-      password,
-      privateKeyPath: connection.privateKeyPath,
-    });
-  }, [sessionId, connection]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -63,39 +53,24 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
     });
 
     const fitAddon = new FitAddon();
-    const webLinksAddon = new WebLinksAddon();
     term.loadAddon(fitAddon);
-    term.loadAddon(webLinksAddon);
+    term.loadAddon(new WebLinksAddon());
     term.open(containerRef.current);
     fitAddon.fit();
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // Send keystrokes to backend
-    term.onData((data) => {
-      ssh.sendInput(sessionId, data);
-    });
+    term.onData((data) => { ssh.sendInput(sessionId, data); });
+    term.onResize(({ cols, rows }) => { ssh.resize(sessionId, cols, rows); });
 
-    // Resize handler
-    term.onResize(({ cols, rows }) => {
-      ssh.resize(sessionId, cols, rows);
-    });
-
-    // Listen for output from backend
-    const unlistenOutput = listen<{ sessionId: string; data: string }>(
-      "ssh-output",
-      (event) => {
+    listenersRef.current = [
+      listen<{ sessionId: string; data: string }>("ssh-output", (event) => {
         if (event.payload.sessionId === sessionId) {
           term.write(event.payload.data);
         }
-      }
-    );
-
-    // Listen for status changes
-    const unlistenStatus = listen<{ sessionId: string; status: string; message?: string }>(
-      "ssh-status",
-      (event) => {
+      }),
+      listen<{ sessionId: string; status: string; message?: string }>("ssh-status", (event) => {
         if (event.payload.sessionId === sessionId) {
           const { status, message } = event.payload;
           if (status === "connected") {
@@ -106,28 +81,49 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
             term.writeln("\r\n\x1b[33m● Connection closed\x1b[0m");
           } else if (status === "error") {
             setSessionStatus(sessionId, "error", message);
-            term.writeln(`\r\n\x1b[31m● Error: ${message}\x1b[0m`);
+            term.writeln(`\r\n\x1b[31m● Error: ${message ?? "unknown"}\x1b[0m`);
           }
         }
-      }
-    );
+      }),
+    ];
 
-    // Window resize handler
-    const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit();
-    });
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
+    const resizeObserver = new ResizeObserver(() => fitAddon.fit());
+    resizeObserver.observe(containerRef.current);
 
     return () => {
-      unlistenOutput.then((fn) => fn());
-      unlistenStatus.then((fn) => fn());
+      listenersRef.current.forEach((p) => p.then((fn) => fn()));
       resizeObserver.disconnect();
       ssh.disconnect(sessionId);
       term.dispose();
     };
   }, [sessionId]);
+
+  const connect = useCallback(async (password?: string) => {
+    const term = termRef.current;
+
+    try {
+      await Promise.all(listenersRef.current);
+    } catch (err) {
+      term?.writeln(`\r\n\x1b[31m● Event listener setup failed: ${err}\x1b[0m`);
+      return;
+    }
+
+    try {
+      await ssh.connect({
+        sessionId,
+        host: connection.host,
+        port: connection.port,
+        username: connection.username,
+        authType: connection.authType,
+        password,
+        privateKeyPath: connection.privateKeyPath,
+      });
+    } catch (err) {
+      const msg = String(err);
+      term?.writeln(`\r\n\x1b[31m● Failed to connect: ${msg}\x1b[0m`);
+      setSessionStatus(sessionId, "error", msg);
+    }
+  }, [sessionId, connection]);
 
   return { connect, term: termRef };
 }

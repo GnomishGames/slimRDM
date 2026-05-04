@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, Folder, Settings } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { Connection } from "../../types";
-import { credentials } from "../../utils/tauri";
+import { AddConnectionModal } from "../modals/AddConnectionModal";
 import clsx from "clsx";
 
 export function Sidebar() {
@@ -12,7 +12,7 @@ export function Sidebar() {
   } = useAppStore();
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [_showAddModal, setShowAddModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const toggleGroup = (id: string) => {
     setExpandedGroups((prev) => {
@@ -37,42 +37,13 @@ export function Sidebar() {
     connections: filtered.filter((c) => c.groupId === g.id),
   }));
 
-  const handleOpen = async (conn: Connection) => {
-    const sessionId = openSession(conn);
-    let password: string | undefined;
-
-    if (conn.authType === "password" && conn.credentialRef) {
-      try {
-        password = await credentials.get(conn.credentialRef);
-      } catch {
-        password = undefined;
-      }
-    }
-
-    if (conn.connectionType === "ssh") {
-      const { ssh } = await import("../../utils/tauri");
-      await ssh.connect({
-        sessionId,
-        host: conn.host,
-        port: conn.port,
-        username: conn.username,
-        authType: conn.authType,
-        password,
-        privateKeyPath: conn.privateKeyPath,
-      });
-    } else {
-      const { rdp } = await import("../../utils/tauri");
-      await rdp.connect({
-        sessionId,
-        host: conn.host,
-        port: conn.port,
-        username: conn.username,
-        password,
-      });
-    }
+  const handleOpen = (conn: Connection) => {
+    openSession(conn);
   };
 
   return (
+    <>
+    {showAddModal && <AddConnectionModal onClose={() => setShowAddModal(false)} />}
     <aside className="sidebar">
       <div className="sidebar-header">
         <span className="app-title">SlimRDM</span>
@@ -127,6 +98,7 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }
 
@@ -159,7 +131,7 @@ function ConnectionItem({
       </button>
 
       {showMenu && (
-        <div className="context-menu">
+        <div className="context-menu" onMouseDown={(e) => e.preventDefault()}>
           <button onClick={() => { onOpen(conn); setShowMenu(false); }}>Connect</button>
           <button onClick={() => { onDelete(conn.id); setShowMenu(false); }} className="danger">Delete</button>
         </div>

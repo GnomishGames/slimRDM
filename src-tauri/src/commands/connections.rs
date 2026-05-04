@@ -1,7 +1,7 @@
 use tauri_plugin_store::StoreExt;
 use serde_json::json;
 
-use crate::store::{Connection, AppStore, new_id, now_ts};
+use crate::store::{Connection, NewConnection, AppStore, new_id, now_ts};
 use crate::error::{SlimError, Result};
 
 const STORE_KEY: &str = "data";
@@ -42,14 +42,27 @@ pub async fn get_connection(app: tauri::AppHandle, id: String) -> std::result::R
 }
 
 #[tauri::command]
-pub async fn add_connection(app: tauri::AppHandle, mut connection: Connection) -> std::result::Result<Connection, String> {
+pub async fn add_connection(app: tauri::AppHandle, connection: NewConnection) -> std::result::Result<Connection, String> {
     let mut store = load_store(&app).map_err(|e| e.to_string())?;
-    connection.id = new_id();
-    connection.created_at = now_ts();
-    connection.last_connected = None;
-    store.connections.push(connection.clone());
+    let conn = Connection {
+        id: new_id(),
+        created_at: now_ts(),
+        last_connected: None,
+        label: connection.label,
+        host: connection.host,
+        port: connection.port,
+        username: connection.username,
+        connection_type: connection.connection_type,
+        group_id: connection.group_id,
+        auth_type: connection.auth_type,
+        private_key_path: connection.private_key_path,
+        credential_ref: connection.credential_ref,
+        notes: connection.notes,
+        tags: connection.tags,
+    };
+    store.connections.push(conn.clone());
     save_store(&app, &store).map_err(|e| e.to_string())?;
-    Ok(connection)
+    Ok(conn)
 }
 
 #[tauri::command]

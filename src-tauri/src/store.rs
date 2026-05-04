@@ -55,6 +55,22 @@ pub struct AppStore {
     pub groups: Vec<Group>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewConnection {
+    pub label: String,
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub connection_type: ConnectionType,
+    pub group_id: Option<String>,
+    pub auth_type: AuthType,
+    pub private_key_path: Option<String>,
+    pub credential_ref: Option<String>,
+    pub notes: Option<String>,
+    pub tags: Vec<String>,
+}
+
 const STORE_FILE: &str = "slimrdm.json";
 
 pub fn init(_app: &AppHandle) -> anyhow::Result<()> {
