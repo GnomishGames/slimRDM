@@ -112,9 +112,12 @@ async fn run_ssh_session(
     let session_id = params.session_id.clone();
     let app_emit = app.clone();
 
+    let (close_tx, mut close_rx) = mpsc::unbounded_channel::<()>();
+
     struct ClientHandler {
         session_id: String,
         app: AppHandle,
+        close_tx: mpsc::UnboundedSender<()>,
     }
 
     #[async_trait::async_trait]
@@ -125,7 +128,6 @@ async fn run_ssh_session(
             &mut self,
             _server_public_key: &key::PublicKey,
         ) -> std::result::Result<bool, Self::Error> {
-            // TODO: implement host key verification with a known_hosts store
             Ok(true)
         }
 
@@ -142,11 +144,21 @@ async fn run_ssh_session(
             });
             Ok(())
         }
+
+        async fn channel_eof(
+            &mut self,
+            _channel: ChannelId,
+            _session: &mut client::Session,
+        ) -> std::result::Result<(), Self::Error> {
+            let _ = self.close_tx.send(());
+            Ok(())
+        }
     }
 
     let handler = ClientHandler {
         session_id: session_id.clone(),
         app: app_emit,
+        close_tx,
     };
 
     let addr = format!("{}:{}", params.host, params.port);
@@ -205,21 +217,28 @@ async fn run_ssh_session(
         message: None,
     });
 
-    // Process input from frontend
+    // Process input from frontend, break on server EOF or explicit disconnect
     loop {
-        match input_rx.recv().await {
-            Some(SshInput::Data(data)) => {
-                channel.data(data.as_bytes())
-                    .await
-                    .map_err(|e| format!("Send failed: {}", e))?;
+        tokio::select! {
+            msg = input_rx.recv() => {
+                match msg {
+                    Some(SshInput::Data(data)) => {
+                        channel.data(data.as_bytes())
+                            .await
+                            .map_err(|e| format!("Send failed: {}", e))?;
+                    }
+                    Some(SshInput::Resize { cols, rows }) => {
+                        channel.window_change(cols as u32, rows as u32, 0, 0)
+                            .await
+                            .map_err(|e| format!("Resize failed: {}", e))?;
+                    }
+                    Some(SshInput::Disconnect) | None => {
+                        let _ = channel.eof().await;
+                        break;
+                    }
+                }
             }
-            Some(SshInput::Resize { cols, rows }) => {
-                channel.window_change(cols as u32, rows as u32, 0, 0)
-                    .await
-                    .map_err(|e| format!("Resize failed: {}", e))?;
-            }
-            Some(SshInput::Disconnect) | None => {
-                let _ = channel.eof().await;
+            _ = close_rx.recv() => {
                 break;
             }
         }

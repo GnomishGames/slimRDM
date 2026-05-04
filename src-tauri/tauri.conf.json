@@ -13,7 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "title": "SlimRDM",
+        "title": "[SlimRDM]",
         "width": 1200,
         "height": 760,
         "minWidth": 900,

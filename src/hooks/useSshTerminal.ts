@@ -19,6 +19,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
   // Store listener promises so connect() can await them before invoking SSH
   const listenersRef = useRef<Promise<UnlistenFn>[]>([]);
   const setSessionStatus = useAppStore((s) => s.setSessionStatus);
+  const closeSession = useAppStore((s) => s.closeSession);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -77,8 +78,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
             setSessionStatus(sessionId, "connected");
             term.writeln("\r\n\x1b[32m● Connected\x1b[0m\r\n");
           } else if (status === "disconnected") {
-            setSessionStatus(sessionId, "disconnected");
-            term.writeln("\r\n\x1b[33m● Connection closed\x1b[0m");
+            closeSession(sessionId);
           } else if (status === "error") {
             setSessionStatus(sessionId, "error", message);
             term.writeln(`\r\n\x1b[31m● Error: ${message ?? "unknown"}\x1b[0m`);
