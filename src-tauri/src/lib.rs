@@ -1,5 +1,4 @@
 mod commands;
-mod session;
 mod store;
 mod error;
 

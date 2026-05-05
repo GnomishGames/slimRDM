@@ -79,8 +79,6 @@ pub struct NewGroup {
     pub icon: Option<String>,
 }
 
-const STORE_FILE: &str = "slimrdm.json";
-
 pub fn init(_app: &AppHandle) -> anyhow::Result<()> {
     // tauri-plugin-store handles init automatically
     Ok(())
