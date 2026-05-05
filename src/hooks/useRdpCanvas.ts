@@ -146,38 +146,44 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
     };
   }, [sessionId]);
 
+  // Map a CSS-space mouse event to canvas (RDP desktop) coordinates.
+  // The canvas element is CSS-scaled to fill the panel, but its internal
+  // resolution matches the remote desktop size — these can differ.
+  function canvasCoords(e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } {
+    const canvas = e.target as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: Math.round((e.clientX - rect.left) * scaleX),
+      y: Math.round((e.clientY - rect.top) * scaleY),
+    };
+  }
+
   // Forward mouse events
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
-    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const x = Math.round(e.clientX - rect.left);
-    const y = Math.round(e.clientY - rect.top);
+    const { x, y } = canvasCoords(e);
     rdp.mouseEvent(sessionId, PTR_MOVE, x, y).catch(() => {});
   }, [sessionId]);
 
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
-    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const x = Math.round(e.clientX - rect.left);
-    const y = Math.round(e.clientY - rect.top);
+    const { x, y } = canvasCoords(e);
     const flags = e.button === 0 ? PTR_LEFT_DOWN : e.button === 2 ? PTR_RIGHT_DOWN : PTR_MID_DOWN;
     rdp.mouseEvent(sessionId, flags, x, y).catch(() => {});
   }, [sessionId]);
 
   const onMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
-    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const x = Math.round(e.clientX - rect.left);
-    const y = Math.round(e.clientY - rect.top);
+    const { x, y } = canvasCoords(e);
     const flags = e.button === 0 ? PTR_LEFT_UP : e.button === 2 ? PTR_RIGHT_UP : PTR_MID_UP;
     rdp.mouseEvent(sessionId, flags, x, y).catch(() => {});
   }, [sessionId]);
 
   const onWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
-    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const x = Math.round(e.clientX - rect.left);
-    const y = Math.round(e.clientY - rect.top);
+    const { x, y } = canvasCoords(e);
     const isNeg = e.deltaY > 0;
     const units = Math.min(Math.abs(Math.round(e.deltaY / 40)), 255);
     const flags = PTR_WHEEL | (isNeg ? PTR_WHEEL_NEG : 0) | units;
