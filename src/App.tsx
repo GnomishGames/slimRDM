@@ -3,14 +3,17 @@ import { Sidebar } from "./components/sidebar/Sidebar";
 import { SessionTabs } from "./components/session/SessionTabs";
 import { SessionPanel } from "./components/session/SessionPanel";
 import { useAppStore } from "./store/appStore";
+import { useSettingsStore } from "./store/settingsStore";
 import "./styles.css";
 
 export default function App() {
   const { loadConnections, loadGroups, sessions, activeSessionId } = useAppStore();
+  const loadSettings = useSettingsStore((s) => s.load);
 
   useEffect(() => {
     loadConnections();
     loadGroups();
+    loadSettings();
   }, []);
 
   return (

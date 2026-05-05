@@ -3,6 +3,7 @@ import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, Folder, Fol
 import { useAppStore } from "../../store/appStore";
 import { Connection } from "../../types";
 import { AddConnectionModal } from "../modals/AddConnectionModal";
+import { SettingsModal } from "../modals/SettingsModal";
 import clsx from "clsx";
 
 export function Sidebar() {
@@ -14,6 +15,7 @@ export function Sidebar() {
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [addingGroup, setAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const groupInputRef = useRef<HTMLInputElement>(null);
@@ -57,6 +59,7 @@ export function Sidebar() {
   return (
     <>
       {showAddModal && <AddConnectionModal onClose={() => setShowAddModal(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       <aside className="sidebar">
         <div className="sidebar-header">
           <span className="app-title">SlimRDM</span>
@@ -124,7 +127,7 @@ export function Sidebar() {
         </div>
 
         <div className="sidebar-footer">
-          <button className="icon-btn" title="Settings">
+          <button className="icon-btn" title="Settings" onClick={() => setShowSettings(true)}>
             <Settings size={15} />
           </button>
         </div>

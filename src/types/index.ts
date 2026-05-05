@@ -1,6 +1,16 @@
 export type ConnectionType = "ssh" | "rdp";
 export type AuthType = "password" | "public_key" | "agent";
 export type SessionStatus = "connecting" | "connected" | "disconnected" | "error";
+export type CursorStyle = "block" | "bar" | "underline";
+
+export interface TerminalSettings {
+  fontFamily: string;
+  fontSize: number;
+  scrollback: number;
+  cursorStyle: CursorStyle;
+  cursorBlink: boolean;
+  theme: string;
+}
 
 export interface Connection {
   id: string;
