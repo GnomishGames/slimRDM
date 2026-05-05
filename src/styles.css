@@ -768,6 +768,15 @@ kbd {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.settings-subsection-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
 .settings-group {
   display: flex;
   align-items: center;

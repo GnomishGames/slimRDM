@@ -21,7 +21,6 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
   const listenersRef = useRef<Promise<UnlistenFn>[]>([]);
   const setSessionStatus = useAppStore((s) => s.setSessionStatus);
   const closeSession = useAppStore((s) => s.closeSession);
-  const termSettings = useSettingsStore((s) => s.terminal);
 
   // Create terminal on mount; use a snapshot of settings at that moment
   useEffect(() => {
@@ -83,18 +82,23 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
     };
   }, [sessionId]);
 
-  // Apply settings changes to a running terminal without recreating it
+  // Subscribe directly to the settings store — bypasses React's render/effect
+  // cycle so xterm.js gets updated imperatively as soon as settings change.
   useEffect(() => {
-    const term = termRef.current;
-    if (!term) return;
-    term.options.fontFamily = termSettings.fontFamily;
-    term.options.fontSize = termSettings.fontSize;
-    term.options.scrollback = termSettings.scrollback;
-    term.options.cursorStyle = termSettings.cursorStyle;
-    term.options.cursorBlink = termSettings.cursorBlink;
-    term.options.theme = getTheme(termSettings.theme);
-    fitAddonRef.current?.fit();
-  }, [termSettings]);
+    return useSettingsStore.subscribe((state) => {
+      const term = termRef.current;
+      if (!term) return;
+      const s = state.terminal;
+      term.options.fontFamily = s.fontFamily;
+      term.options.fontSize = s.fontSize;
+      term.options.scrollback = s.scrollback;
+      term.options.cursorStyle = s.cursorStyle;
+      term.options.cursorBlink = s.cursorBlink;
+      term.options.theme = getTheme(s.theme);
+      fitAddonRef.current?.fit();
+      term.refresh(0, term.rows - 1);
+    });
+  }, []);
 
   const connect = useCallback(async (password?: string) => {
     const term = termRef.current;

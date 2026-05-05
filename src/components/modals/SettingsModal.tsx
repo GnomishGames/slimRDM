@@ -1,6 +1,7 @@
-import { X, Monitor, Server, Sliders, Database, Info } from "lucide-react";
+import { X, Palette, Server, Sliders, Database, Info } from "lucide-react";
 import { useSettingsStore } from "../../store/settingsStore";
 import { TERMINAL_THEMES, FONT_FAMILIES } from "../../utils/terminalThemes";
+import { APP_THEMES } from "../../utils/appThemes";
 import { CursorStyle } from "../../types";
 import clsx from "clsx";
 
@@ -8,18 +9,18 @@ interface Props {
   onClose: () => void;
 }
 
-type NavSection = "terminal";
+type NavSection = "appearance";
 
 const NAV: { id: NavSection | string; label: string; icon: React.ReactNode; available: boolean }[] = [
-  { id: "terminal",     label: "Terminal",    icon: <Monitor size={14} />,  available: true },
-  { id: "ssh-defaults", label: "SSH Defaults", icon: <Server size={14} />,  available: false },
-  { id: "behavior",     label: "Behavior",    icon: <Sliders size={14} />, available: false },
-  { id: "data",         label: "Data",        icon: <Database size={14} />, available: false },
-  { id: "about",        label: "About",       icon: <Info size={14} />,    available: false },
+  { id: "appearance",   label: "Appearance",   icon: <Palette size={14} />,  available: true },
+  { id: "ssh-defaults", label: "SSH Defaults",  icon: <Server size={14} />,  available: false },
+  { id: "behavior",     label: "Behavior",      icon: <Sliders size={14} />, available: false },
+  { id: "data",         label: "Data",          icon: <Database size={14} />, available: false },
+  { id: "about",        label: "About",         icon: <Info size={14} />,    available: false },
 ];
 
 export function SettingsModal({ onClose }: Props) {
-  const activeSection: NavSection = "terminal";
+  const activeSection: NavSection = "appearance";
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -46,7 +47,7 @@ export function SettingsModal({ onClose }: Props) {
             ))}
           </nav>
           <div className="settings-content">
-            {activeSection === "terminal" && <TerminalSection />}
+            {activeSection === "appearance" && <AppearanceSection />}
           </div>
         </div>
       </div>
@@ -54,12 +55,41 @@ export function SettingsModal({ onClose }: Props) {
   );
 }
 
-function TerminalSection() {
-  const { terminal, setTerminal } = useSettingsStore();
+function AppearanceSection() {
+  const { terminal, setTerminal, appTheme, setAppTheme } = useSettingsStore();
 
   return (
     <div className="settings-section">
-      <h3 className="settings-section-title">Terminal Appearance</h3>
+      <h3 className="settings-section-title">Appearance</h3>
+
+      {/* ── App Theme ───────────────────────────── */}
+      <p className="settings-subsection-title">App Theme</p>
+
+      <div className="settings-group settings-group--column">
+        <div className="theme-grid">
+          {Object.entries(APP_THEMES).map(([key, entry]) => (
+            <button
+              key={key}
+              className={clsx("theme-swatch", appTheme === key && "theme-swatch--active")}
+              style={{
+                "--swatch-bg": entry.vars["--bg-surface"],
+                "--swatch-accent": entry.vars["--accent"],
+              } as React.CSSProperties}
+              onClick={() => setAppTheme(key)}
+            >
+              <span className="theme-swatch-preview">
+                <span className="swatch-dot" style={{ background: entry.vars["--accent"] }} />
+                <span className="swatch-dot" style={{ background: entry.vars["--green"] }} />
+                <span className="swatch-dot" style={{ background: entry.vars["--red"] }} />
+              </span>
+              <span className="theme-swatch-label">{entry.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Terminal ────────────────────────────── */}
+      <p className="settings-subsection-title" style={{ marginTop: 16 }}>Terminal</p>
 
       <div className="settings-group">
         <label className="settings-row-label">Font Family</label>
@@ -77,15 +107,9 @@ function TerminalSection() {
       <div className="settings-group">
         <label className="settings-row-label">Font Size</label>
         <div className="settings-stepper">
-          <button
-            className="stepper-btn"
-            onClick={() => setTerminal({ fontSize: Math.max(8, terminal.fontSize - 1) })}
-          >−</button>
+          <button className="stepper-btn" onClick={() => setTerminal({ fontSize: Math.max(8, terminal.fontSize - 1) })}>−</button>
           <span className="stepper-value">{terminal.fontSize}px</span>
-          <button
-            className="stepper-btn"
-            onClick={() => setTerminal({ fontSize: Math.min(32, terminal.fontSize + 1) })}
-          >+</button>
+          <button className="stepper-btn" onClick={() => setTerminal({ fontSize: Math.min(32, terminal.fontSize + 1) })}>+</button>
         </div>
       </div>
 
@@ -131,7 +155,7 @@ function TerminalSection() {
       </div>
 
       <div className="settings-group settings-group--column">
-        <label className="settings-row-label">Theme</label>
+        <label className="settings-row-label">Terminal Colors</label>
         <div className="theme-grid">
           {Object.entries(TERMINAL_THEMES).map(([key, entry]) => (
             <button
