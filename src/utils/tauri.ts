@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 export const ssh = {
   connect: (params: {
@@ -37,6 +38,11 @@ export const rdp = {
 
   disconnect: (sessionId: string) =>
     invoke("rdp_disconnect", { sessionId }),
+};
+
+export const dialog = {
+  pickFile: (title: string) =>
+    openDialog({ title, multiple: false, directory: false }),
 };
 
 export const credentials = {

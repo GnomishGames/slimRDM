@@ -561,6 +561,19 @@ kbd {
   min-height: 52px;
 }
 
+.field-browse {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.field-browse .field-input { flex: 1; }
+
+.btn--icon {
+  padding: 6px 8px;
+  flex-shrink: 0;
+}
+
 /* Type toggle */
 .type-toggle {
   display: flex;

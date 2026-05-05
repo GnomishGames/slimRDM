@@ -103,9 +103,9 @@ export function Sidebar() {
 }
 
 function AuthIcon({ authType }: { authType: string }) {
-  if (authType === "public_key") return <Key size={9} className="auth-icon auth-icon--key" title="Public key" />;
-  if (authType === "agent")      return <Cpu size={9} className="auth-icon auth-icon--agent" title="SSH agent" />;
-  return <LockKeyhole size={9} className="auth-icon auth-icon--password" title="Password" />;
+  if (authType === "public_key") return <span title="Public key"><Key size={9} className="auth-icon auth-icon--key" /></span>;
+  if (authType === "agent")      return <span title="SSH agent"><Cpu size={9} className="auth-icon auth-icon--agent" /></span>;
+  return <span title="Password"><LockKeyhole size={9} className="auth-icon auth-icon--password" /></span>;
 }
 
 function ConnectionItem({
@@ -117,34 +117,39 @@ function ConnectionItem({
   indent?: boolean;
 }) {
   const [showMenu, setShowMenu] = useState(false);
+  const [editing, setEditing] = useState(false);
   const isRdp = conn.connectionType === "rdp";
 
   return (
-    <div
-      className={clsx("connection-item", indent && "connection-item--indented")}
-      onContextMenu={(e) => { e.preventDefault(); setShowMenu(true); }}
-      onBlur={() => setShowMenu(false)}
-      tabIndex={0}
-    >
-      <button className="connection-btn" onDoubleClick={() => onOpen(conn)}>
-        <span className={clsx("conn-icon", isRdp ? "conn-icon--rdp" : "conn-icon--ssh")}>
-          {isRdp ? <Monitor size={13} /> : <Terminal size={13} />}
-        </span>
-        <span className="conn-info">
-          <span className="conn-label">{conn.label}</span>
-          <span className="conn-host">
-            <AuthIcon authType={conn.authType} />
-            {conn.username}@{conn.host}:{conn.port}
+    <>
+      {editing && <AddConnectionModal editing={conn} onClose={() => setEditing(false)} />}
+      <div
+        className={clsx("connection-item", indent && "connection-item--indented")}
+        onContextMenu={(e) => { e.preventDefault(); setShowMenu(true); }}
+        onBlur={() => setShowMenu(false)}
+        tabIndex={0}
+      >
+        <button className="connection-btn" onDoubleClick={() => onOpen(conn)}>
+          <span className={clsx("conn-icon", isRdp ? "conn-icon--rdp" : "conn-icon--ssh")}>
+            {isRdp ? <Monitor size={13} /> : <Terminal size={13} />}
           </span>
-        </span>
-      </button>
+          <span className="conn-info">
+            <span className="conn-label">{conn.label}</span>
+            <span className="conn-host">
+              <AuthIcon authType={conn.authType} />
+              {conn.username}@{conn.host}:{conn.port}
+            </span>
+          </span>
+        </button>
 
-      {showMenu && (
-        <div className="context-menu" onMouseDown={(e) => e.preventDefault()}>
-          <button onClick={() => { onOpen(conn); setShowMenu(false); }}>Connect</button>
-          <button onClick={() => { onDelete(conn.id); setShowMenu(false); }} className="danger">Delete</button>
-        </div>
-      )}
-    </div>
+        {showMenu && (
+          <div className="context-menu" onMouseDown={(e) => e.preventDefault()}>
+            <button onClick={() => { onOpen(conn); setShowMenu(false); }}>Connect</button>
+            <button onClick={() => { setEditing(true); setShowMenu(false); }}>Edit</button>
+            <button onClick={() => { onDelete(conn.id); setShowMenu(false); }} className="danger">Delete</button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

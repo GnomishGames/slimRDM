@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Monitor, Terminal } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
-import { credentials } from "../../utils/tauri";
-import { ConnectionType, AuthType } from "../../types";
+import { credentials, dialog } from "../../utils/tauri";
+import { FolderOpen } from "lucide-react";
+import { Connection, ConnectionType, AuthType } from "../../types";
 import clsx from "clsx";
 
 interface Props {
   onClose: () => void;
+  editing?: Connection;
 }
 
 const DEFAULTS: Record<ConnectionType, { port: number; authType: AuthType }> = {
@@ -14,25 +16,35 @@ const DEFAULTS: Record<ConnectionType, { port: number; authType: AuthType }> = {
   rdp: { port: 3389, authType: "password" },
 };
 
-export function AddConnectionModal({ onClose }: Props) {
-  const { addConnection } = useAppStore();
+export function AddConnectionModal({ onClose, editing }: Props) {
+  const { addConnection, updateConnection } = useAppStore();
+  const isEdit = !!editing;
 
-  const [connType, setConnType] = useState<ConnectionType>("ssh");
-  const [label, setLabel] = useState("");
-  const [host, setHost] = useState("");
-  const [port, setPort] = useState(DEFAULTS.ssh.port);
-  const [username, setUsername] = useState("");
-  const [authType, setAuthType] = useState<AuthType>("password");
+  const [connType, setConnType] = useState<ConnectionType>(editing?.connectionType ?? "ssh");
+  const [label, setLabel] = useState(editing?.label ?? "");
+  const [host, setHost] = useState(editing?.host ?? "");
+  const [port, setPort] = useState(editing?.port ?? DEFAULTS.ssh.port);
+  const [username, setUsername] = useState(editing?.username ?? "");
+  const [authType, setAuthType] = useState<AuthType>(editing?.authType ?? "password");
   const [password, setPassword] = useState("");
-  const [privateKeyPath, setPrivateKeyPath] = useState("");
-  const [notes, setNotes] = useState("");
+  const [privateKeyPath, setPrivateKeyPath] = useState(editing?.privateKeyPath ?? "");
+  const [notes, setNotes] = useState(editing?.notes ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
+  // Pre-load existing password when editing
+  useEffect(() => {
+    if (editing?.credentialRef && editing.authType === "password") {
+      credentials.get(editing.credentialRef).then(setPassword).catch(() => {});
+    }
+  }, []);
+
   const switchType = (t: ConnectionType) => {
     setConnType(t);
-    setPort(DEFAULTS[t].port);
-    setAuthType(DEFAULTS[t].authType);
+    if (!isEdit) {
+      setPort(DEFAULTS[t].port);
+      setAuthType(DEFAULTS[t].authType);
+    }
   };
 
   const validate = () => {
@@ -41,7 +53,7 @@ export function AddConnectionModal({ onClose }: Props) {
     if (!host.trim()) e.host = "Required";
     if (!port || port < 1 || port > 65535) e.port = "1–65535";
     if (!username.trim()) e.username = "Required";
-    if (authType === "password" && !password) e.password = "Required";
+    if (authType === "password" && !isEdit && !password) e.password = "Required";
     if (authType === "public_key" && !privateKeyPath.trim()) e.privateKeyPath = "Required";
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -52,23 +64,48 @@ export function AddConnectionModal({ onClose }: Props) {
     if (!validate()) return;
     setSaving(true);
     try {
-      let credentialRef: string | undefined;
-      if (authType === "password" && password) {
-        credentialRef = `${host}:${port}:${username}`;
-        await credentials.save(credentialRef, password);
+      let credentialRef = editing?.credentialRef;
+
+      if (authType === "password") {
+        credentialRef = `${host.trim()}:${port}:${username.trim()}`;
+        if (password) {
+          await credentials.save(credentialRef, password);
+        }
+      } else {
+        // Auth type changed away from password — remove old credential
+        if (editing?.credentialRef) {
+          await credentials.delete(editing.credentialRef).catch(() => {});
+        }
+        credentialRef = undefined;
       }
-      await addConnection({
-        label: label.trim(),
-        host: host.trim(),
-        port,
-        username: username.trim(),
-        connectionType: connType,
-        authType,
-        privateKeyPath: authType === "public_key" ? privateKeyPath.trim() : undefined,
-        credentialRef,
-        notes: notes.trim() || undefined,
-        tags: [],
-      });
+
+      if (isEdit) {
+        await updateConnection({
+          ...editing,
+          label: label.trim(),
+          host: host.trim(),
+          port,
+          username: username.trim(),
+          connectionType: connType,
+          authType,
+          privateKeyPath: authType === "public_key" ? privateKeyPath.trim() : undefined,
+          credentialRef,
+          notes: notes.trim() || undefined,
+        });
+      } else {
+        await addConnection({
+          label: label.trim(),
+          host: host.trim(),
+          port,
+          username: username.trim(),
+          connectionType: connType,
+          authType,
+          privateKeyPath: authType === "public_key" ? privateKeyPath.trim() : undefined,
+          credentialRef,
+          notes: notes.trim() || undefined,
+          tags: [],
+        });
+      }
       onClose();
     } catch (err) {
       setErrors({ _form: String(err) });
@@ -81,12 +118,11 @@ export function AddConnectionModal({ onClose }: Props) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">New Connection</span>
+          <span className="modal-title">{isEdit ? "Edit Connection" : "New Connection"}</span>
           <button className="icon-btn" onClick={onClose}><X size={15} /></button>
         </div>
 
         <form className="modal-body" onSubmit={handleSubmit}>
-          {/* Type toggle */}
           <div className="field-row">
             <label className="field-label">Type</label>
             <div className="type-toggle">
@@ -130,14 +166,22 @@ export function AddConnectionModal({ onClose }: Props) {
           )}
 
           {authType === "password" && (
-            <Field label="Password" error={errors.password}>
+            <Field label={isEdit ? "Password (leave blank to keep existing)" : "Password"} error={errors.password}>
               <input className={clsx("field-input", errors.password && "field-input--error")} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
             </Field>
           )}
 
           {authType === "public_key" && (
             <Field label="Key path" error={errors.privateKeyPath}>
-              <input className={clsx("field-input", errors.privateKeyPath && "field-input--error")} placeholder="~/.ssh/id_rsa" value={privateKeyPath} onChange={e => setPrivateKeyPath(e.target.value)} />
+              <div className="field-browse">
+                <input className={clsx("field-input", errors.privateKeyPath && "field-input--error")} placeholder="~/.ssh/id_rsa" value={privateKeyPath} onChange={e => setPrivateKeyPath(e.target.value)} />
+                <button type="button" className="btn btn--ghost btn--icon" onClick={async () => {
+                  const picked = await dialog.pickFile("Select SSH private key");
+                  if (picked) setPrivateKeyPath(picked as string);
+                }}>
+                  <FolderOpen size={14} />
+                </button>
+              </div>
             </Field>
           )}
 
@@ -150,7 +194,7 @@ export function AddConnectionModal({ onClose }: Props) {
           <div className="modal-actions">
             <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn--primary" disabled={saving}>
-              {saving ? "Saving…" : "Add Connection"}
+              {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Connection"}
             </button>
           </div>
         </form>
