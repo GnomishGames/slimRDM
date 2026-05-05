@@ -150,10 +150,9 @@ async fn run_rdp_session(
             .map(build_performance_flags)
             .unwrap_or_else(|| match params.connection_quality.as_deref() {
                 Some("lan") => PerformanceFlags::empty(),
-                Some("broadband") => PerformanceFlags::DISABLE_WALL_PAPER
-                    | PerformanceFlags::DISABLE_FONT_SMOOTHING
-                    | PerformanceFlags::DISABLE_ANIMATION
-                    | PerformanceFlags::DISABLE_MENU_ANIMATIONS,
+                Some("broadband") => PerformanceFlags::DISABLE_WALLPAPER
+                    | PerformanceFlags::ENABLE_FONT_SMOOTHING
+                    | PerformanceFlags::DISABLE_MENUANIMATIONS,
                 Some("modem") => PerformanceFlags::all(),
                 _ => PerformanceFlags::default(),
             }),
