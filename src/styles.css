@@ -438,6 +438,24 @@ html, body, #root {
 .rdp-status-host { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
 .rdp-note { font-size: 12px; color: var(--text-muted); max-width: 400px; text-align: center; }
 
+.rdp-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  cursor: default;
+  background: #000;
+}
+
+.rdp-panel--loading,
+.rdp-panel--error {
+  gap: 12px;
+  flex-direction: row;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.rdp-panel--error { color: var(--red); }
+
 /* ── Empty State ─────────────────────────────────────── */
 .empty-state {
   flex: 1;

@@ -33,11 +33,19 @@ export const rdp = {
     domain?: string;
     width?: number;
     height?: number;
-    fullscreen?: boolean;
   }) => invoke("rdp_connect", { params }),
 
   disconnect: (sessionId: string) =>
     invoke("rdp_disconnect", { sessionId }),
+
+  mouseEvent: (sessionId: string, flags: number, x: number, y: number) =>
+    invoke("rdp_mouse_event", { sessionId, flags, x, y }),
+
+  keyEvent: (sessionId: string, flags: number, scancode: number) =>
+    invoke("rdp_key_event", { sessionId, flags, scancode }),
+
+  resize: (sessionId: string, width: number, height: number) =>
+    invoke("rdp_resize", { sessionId, width, height }),
 };
 
 export const dialog = {

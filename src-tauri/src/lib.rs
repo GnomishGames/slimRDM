@@ -34,6 +34,9 @@ pub fn run() {
             // RDP
             commands::rdp::rdp_connect,
             commands::rdp::rdp_disconnect,
+            commands::rdp::rdp_mouse_event,
+            commands::rdp::rdp_key_event,
+            commands::rdp::rdp_resize,
             // Credentials
             commands::credentials::save_credential,
             commands::credentials::get_credential,

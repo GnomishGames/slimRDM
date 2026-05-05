@@ -1,6 +1,7 @@
 import { useRef, useEffect } from "react";
 import { Session } from "../../types";
 import { useSshTerminal } from "../../hooks/useSshTerminal";
+import { useRdpCanvas } from "../../hooks/useRdpCanvas";
 import { credentials } from "../../utils/tauri";
 import clsx from "clsx";
 
@@ -54,28 +55,40 @@ function SshPanel({ session, active }: Props) {
 }
 
 function RdpPanel({ session }: { session: Session }) {
-  return (
-    <div className="rdp-panel">
-      <div className="rdp-status">
-        <div className={clsx("rdp-status-dot", `rdp-status-dot--${session.status}`)} />
-        <div className="rdp-status-info">
-          <span className="rdp-status-label">
-            {session.status === "connecting" && "Launching RDP client…"}
-            {session.status === "connected" && "RDP session active in external window"}
-            {session.status === "disconnected" && "Session closed"}
-            {session.status === "error" && `Error: ${session.error}`}
-          </span>
-          <span className="rdp-status-host">
-            {session.connection.username}@{session.connection.host}:{session.connection.port}
-          </span>
-        </div>
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { onMouseMove, onMouseDown, onMouseUp, onWheel, onKeyDown, onKeyUp } =
+    useRdpCanvas({ sessionId: session.id, connection: session.connection, canvasRef });
+
+  if (session.status === "connecting") {
+    return (
+      <div className="rdp-panel rdp-panel--loading">
+        <div className="rdp-status-dot rdp-status-dot--connecting" />
+        <span>Connecting to {session.connection.host}…</span>
       </div>
-      {session.status === "connected" && (
-        <p className="rdp-note">
-          RDP is managed by your system's native client (mstsc / xfreerdp).
-          Close that window to end the session.
-        </p>
-      )}
-    </div>
+    );
+  }
+
+  if (session.status === "error") {
+    return (
+      <div className="rdp-panel rdp-panel--error">
+        <div className="rdp-status-dot rdp-status-dot--error" />
+        <span>{session.error}</span>
+      </div>
+    );
+  }
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="rdp-canvas"
+      tabIndex={0}
+      onMouseMove={onMouseMove}
+      onMouseDown={onMouseDown}
+      onMouseUp={onMouseUp}
+      onWheel={onWheel}
+      onKeyDown={onKeyDown}
+      onKeyUp={onKeyUp}
+      onContextMenu={(e) => e.preventDefault()}
+    />
   );
 }
