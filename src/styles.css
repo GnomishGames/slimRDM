@@ -786,6 +786,13 @@ kbd {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.settings-section-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: -10px;
+  margin-bottom: 16px;
+}
+
 .settings-subsection-title {
   font-size: 10px;
   font-weight: 600;

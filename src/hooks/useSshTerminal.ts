@@ -109,6 +109,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
       return;
     }
     try {
+      const { sshDefaults } = useSettingsStore.getState();
       await ssh.connect({
         sessionId,
         host: connection.host,
@@ -117,6 +118,8 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
         authType: connection.authType,
         password,
         privateKeyPath: connection.privateKeyPath,
+        keepaliveInterval: sshDefaults.keepaliveInterval,
+        connectTimeout: sshDefaults.connectTimeout,
       });
     } catch (err) {
       const msg = String(err);

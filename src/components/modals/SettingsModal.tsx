@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { X, Palette, Server, Sliders, Database, Info } from "lucide-react";
 import { useSettingsStore } from "../../store/settingsStore";
 import { TERMINAL_THEMES, FONT_FAMILIES } from "../../utils/terminalThemes";
@@ -9,18 +10,18 @@ interface Props {
   onClose: () => void;
 }
 
-type NavSection = "appearance";
+type NavSection = "appearance" | "ssh-defaults";
 
 const NAV: { id: NavSection | string; label: string; icon: React.ReactNode; available: boolean }[] = [
   { id: "appearance",   label: "Appearance",   icon: <Palette size={14} />,  available: true },
-  { id: "ssh-defaults", label: "SSH Defaults",  icon: <Server size={14} />,  available: false },
+  { id: "ssh-defaults", label: "SSH Defaults",  icon: <Server size={14} />,  available: true },
   { id: "behavior",     label: "Behavior",      icon: <Sliders size={14} />, available: false },
   { id: "data",         label: "Data",          icon: <Database size={14} />, available: false },
   { id: "about",        label: "About",         icon: <Info size={14} />,    available: false },
 ];
 
 export function SettingsModal({ onClose }: Props) {
-  const activeSection: NavSection = "appearance";
+  const [activeSection, setActiveSection] = useState<NavSection>("appearance");
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -40,6 +41,7 @@ export function SettingsModal({ onClose }: Props) {
                   !item.available && "settings-nav-item--disabled",
                 )}
                 disabled={!item.available}
+                onClick={() => item.available && setActiveSection(item.id as NavSection)}
               >
                 {item.icon}
                 {item.label}
@@ -48,8 +50,70 @@ export function SettingsModal({ onClose }: Props) {
           </nav>
           <div className="settings-content">
             {activeSection === "appearance" && <AppearanceSection />}
+            {activeSection === "ssh-defaults" && <SshDefaultsSection />}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SshDefaultsSection() {
+  const { sshDefaults, setSshDefaults } = useSettingsStore();
+
+  return (
+    <div className="settings-section">
+      <h3 className="settings-section-title">SSH Defaults</h3>
+      <p className="settings-section-desc">Applied when creating new SSH connections.</p>
+
+      <div className="settings-group">
+        <label className="settings-row-label">Default Username</label>
+        <input
+          className="field-input"
+          placeholder="e.g. admin"
+          value={sshDefaults.username}
+          onChange={(e) => setSshDefaults({ username: e.target.value })}
+        />
+      </div>
+
+      <div className="settings-group">
+        <label className="settings-row-label">Default Port</label>
+        <div className="settings-stepper">
+          <button className="stepper-btn" onClick={() => setSshDefaults({ port: Math.max(1, sshDefaults.port - 1) })}>−</button>
+          <span className="stepper-value">{sshDefaults.port}</span>
+          <button className="stepper-btn" onClick={() => setSshDefaults({ port: Math.min(65535, sshDefaults.port + 1) })}>+</button>
+        </div>
+      </div>
+
+      <div className="settings-group">
+        <label className="settings-row-label">Keepalive Interval</label>
+        <select
+          className="field-input field-select settings-select-narrow"
+          value={sshDefaults.keepaliveInterval}
+          onChange={(e) => setSshDefaults({ keepaliveInterval: Number(e.target.value) })}
+        >
+          <option value={0}>Disabled</option>
+          <option value={30}>30s</option>
+          <option value={60}>60s</option>
+          <option value={120}>2m</option>
+          <option value={300}>5m</option>
+        </select>
+      </div>
+
+      <div className="settings-group">
+        <label className="settings-row-label">Connect Timeout</label>
+        <select
+          className="field-input field-select settings-select-narrow"
+          value={sshDefaults.connectTimeout}
+          onChange={(e) => setSshDefaults({ connectTimeout: Number(e.target.value) })}
+        >
+          <option value={0}>None</option>
+          <option value={5}>5s</option>
+          <option value={10}>10s</option>
+          <option value={15}>15s</option>
+          <option value={30}>30s</option>
+          <option value={60}>60s</option>
+        </select>
       </div>
     </div>
   );

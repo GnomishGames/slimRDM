@@ -11,6 +11,8 @@ export const ssh = {
     password?: string;
     privateKeyPath?: string;
     privateKeyPassphrase?: string;
+    keepaliveInterval?: number;
+    connectTimeout?: number;
   }) => invoke("ssh_connect", { params }),
 
   sendInput: (sessionId: string, data: string) =>

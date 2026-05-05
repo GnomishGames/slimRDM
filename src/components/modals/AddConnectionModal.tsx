@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Monitor, Terminal } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
+import { useSettingsStore } from "../../store/settingsStore";
 import { credentials, dialog } from "../../utils/tauri";
 import { FolderOpen } from "lucide-react";
 import { Group } from "../../types";
@@ -19,13 +20,14 @@ const DEFAULTS: Record<ConnectionType, { port: number; authType: AuthType }> = {
 
 export function AddConnectionModal({ onClose, editing }: Props) {
   const { addConnection, updateConnection, groups } = useAppStore();
+  const sshDefaults = useSettingsStore((s) => s.sshDefaults);
   const isEdit = !!editing;
 
   const [connType, setConnType] = useState<ConnectionType>(editing?.connectionType ?? "ssh");
   const [label, setLabel] = useState(editing?.label ?? "");
   const [host, setHost] = useState(editing?.host ?? "");
-  const [port, setPort] = useState(editing?.port ?? DEFAULTS.ssh.port);
-  const [username, setUsername] = useState(editing?.username ?? "");
+  const [port, setPort] = useState(editing?.port ?? (connType === "ssh" ? sshDefaults.port : DEFAULTS.rdp.port));
+  const [username, setUsername] = useState(editing?.username ?? (connType === "ssh" ? sshDefaults.username : ""));
   const [authType, setAuthType] = useState<AuthType>(editing?.authType ?? "password");
   const [password, setPassword] = useState("");
   const [privateKeyPath, setPrivateKeyPath] = useState(editing?.privateKeyPath ?? "");
@@ -44,8 +46,9 @@ export function AddConnectionModal({ onClose, editing }: Props) {
   const switchType = (t: ConnectionType) => {
     setConnType(t);
     if (!isEdit) {
-      setPort(DEFAULTS[t].port);
+      setPort(t === "ssh" ? sshDefaults.port : DEFAULTS.rdp.port);
       setAuthType(DEFAULTS[t].authType);
+      if (t === "ssh" && sshDefaults.username) setUsername(sshDefaults.username);
     }
   };
 

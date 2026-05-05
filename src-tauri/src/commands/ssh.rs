@@ -31,6 +31,8 @@ pub struct SshConnectParams {
     pub password: Option<String>,
     pub private_key_path: Option<String>,
     pub private_key_passphrase: Option<String>,
+    pub keepalive_interval: Option<u32>, // seconds; None = disabled
+    pub connect_timeout: Option<u32>,    // seconds; None = no timeout
 }
 
 /// Emitted to frontend for terminal output
@@ -104,8 +106,14 @@ async fn run_ssh_session(
     use russh_keys::*;
     use std::sync::Arc;
 
+    let keepalive = params.keepalive_interval
+        .filter(|&s| s > 0)
+        .map(|s| std::time::Duration::from_secs(s.into()));
+
     let config = Arc::new(client::Config {
         inactivity_timeout: Some(std::time::Duration::from_secs(3600)),
+        keepalive_interval: keepalive,
+        keepalive_max: 3,
         ..<_>::default()
     });
 
@@ -162,9 +170,15 @@ async fn run_ssh_session(
     };
 
     let addr = format!("{}:{}", params.host, params.port);
-    let mut session = client::connect(config, addr, handler)
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    let connect_fut = client::connect(config, addr, handler);
+    let mut session = if let Some(secs) = params.connect_timeout.filter(|&s| s > 0) {
+        tokio::time::timeout(std::time::Duration::from_secs(secs.into()), connect_fut)
+            .await
+            .map_err(|_| format!("Connection timed out after {}s", secs))?
+            .map_err(|e| format!("Connection failed: {}", e))?
+    } else {
+        connect_fut.await.map_err(|e| format!("Connection failed: {}", e))?
+    };
 
     // Authenticate
     let authenticated = match &params.auth_type {

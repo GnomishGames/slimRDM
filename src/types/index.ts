@@ -46,6 +46,13 @@ export interface Session {
   error?: string;
 }
 
+export interface SshDefaults {
+  username: string;
+  port: number;
+  keepaliveInterval: number; // seconds; 0 = disabled
+  connectTimeout: number;    // seconds
+}
+
 export interface NewConnectionForm {
   label: string;
   host: string;
