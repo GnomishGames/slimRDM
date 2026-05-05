@@ -3,8 +3,8 @@ name = "slimrdm"
 version = "0.1.0"
 description = "SlimRDM - Lightweight RDP & SSH Client"
 authors = ["SlimRDM"]
-license = ""
-repository = ""
+license = "MIT"
+repository = "https://github.com/GnomishGames/slimRDM"
 edition = "2021"
 
 [lib]
