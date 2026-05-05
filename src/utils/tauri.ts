@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 
 export const ssh = {
   connect: (params: {
@@ -53,6 +53,17 @@ export const rdp = {
 export const dialog = {
   pickFile: (title: string) =>
     openDialog({ title, multiple: false, directory: false }),
+
+  saveFile: (title: string, defaultPath?: string) =>
+    saveDialog({ title, defaultPath }),
+};
+
+export const data = {
+  export: (path: string) =>
+    invoke("export_data", { path }),
+
+  import: (path: string, replace: boolean) =>
+    invoke<{ connectionsAdded: number; groupsAdded: number }>("import_data", { path, replace }),
 };
 
 export const credentials = {

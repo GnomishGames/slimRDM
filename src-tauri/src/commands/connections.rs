@@ -6,7 +6,7 @@ use crate::error::{SlimError, Result};
 
 const STORE_KEY: &str = "data";
 
-pub(super) fn load_store(app: &tauri::AppHandle) -> Result<AppStore> {
+pub(crate) fn load_store(app: &tauri::AppHandle) -> Result<AppStore> {
     let store = app.store("slimrdm.json")
         .map_err(|e| SlimError::StoreError(e.to_string()))?;
     let data = store.get(STORE_KEY);
@@ -17,7 +17,7 @@ pub(super) fn load_store(app: &tauri::AppHandle) -> Result<AppStore> {
     }
 }
 
-pub(super) fn save_store(app: &tauri::AppHandle, data: &AppStore) -> Result<()> {
+pub(crate) fn save_store(app: &tauri::AppHandle, data: &AppStore) -> Result<()> {
     let store = app.store("slimrdm.json")
         .map_err(|e| SlimError::StoreError(e.to_string()))?;
     store.set(STORE_KEY, json!(data));

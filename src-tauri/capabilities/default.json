@@ -19,6 +19,8 @@
     "store:allow-length",
     "store:allow-reset",
     "dialog:default",
+    "dialog:allow-save",
+    "dialog:allow-open",
     "notification:default",
     "shell:allow-open",
     "window-state:default"

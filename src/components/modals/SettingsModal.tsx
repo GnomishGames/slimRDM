@@ -1,24 +1,26 @@
 import { useState, useEffect } from "react";
-import { X, Palette, Server, Sliders, Database, Info, Github, ExternalLink } from "lucide-react";
+import { X, Palette, Server, Sliders, Database, Info, Github, ExternalLink, Upload, Download } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useSettingsStore } from "../../store/settingsStore";
+import { useAppStore } from "../../store/appStore";
 import { TERMINAL_THEMES, FONT_FAMILIES } from "../../utils/terminalThemes";
 import { APP_THEMES } from "../../utils/appThemes";
 import { CursorStyle } from "../../types";
+import { dialog, data } from "../../utils/tauri";
 import clsx from "clsx";
 
 interface Props {
   onClose: () => void;
 }
 
-type NavSection = "appearance" | "ssh-defaults" | "about";
+type NavSection = "appearance" | "ssh-defaults" | "data" | "about";
 
 const NAV: { id: NavSection | string; label: string; icon: React.ReactNode; available: boolean }[] = [
   { id: "appearance",   label: "Appearance",   icon: <Palette size={14} />,  available: true },
   { id: "ssh-defaults", label: "SSH Defaults",  icon: <Server size={14} />,  available: true },
   { id: "behavior",     label: "Behavior",      icon: <Sliders size={14} />, available: false },
-  { id: "data",         label: "Data",          icon: <Database size={14} />, available: false },
+  { id: "data",         label: "Data",          icon: <Database size={14} />, available: true },
   { id: "about",        label: "About",         icon: <Info size={14} />,    available: true },
 ];
 
@@ -53,6 +55,7 @@ export function SettingsModal({ onClose }: Props) {
           <div className="settings-content">
             {activeSection === "appearance" && <AppearanceSection />}
             {activeSection === "ssh-defaults" && <SshDefaultsSection />}
+            {activeSection === "data" && <DataSection />}
             {activeSection === "about" && <AboutSection />}
           </div>
         </div>
@@ -241,6 +244,89 @@ function AppearanceSection() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function DataSection() {
+  const { connections, groups, loadConnections, loadGroups } = useAppStore();
+  const [importMode, setImportMode] = useState<"merge" | "replace">("merge");
+  const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const handleExport = async () => {
+    const path = await dialog.saveFile("Export connections", "slimrdm-backup.json");
+    if (!path) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      await data.export(path as string);
+      setStatus({ type: "ok", msg: `Exported ${connections.length} connection(s) and ${groups.length} group(s).` });
+    } catch (err) {
+      setStatus({ type: "err", msg: String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleImport = async () => {
+    const path = await dialog.pickFile("Import connections");
+    if (!path) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const result = await data.import(path as string, importMode === "replace");
+      await Promise.all([loadConnections(), loadGroups()]);
+      setStatus({ type: "ok", msg: `Imported ${result.connectionsAdded} connection(s) and ${result.groupsAdded} group(s).` });
+    } catch (err) {
+      setStatus({ type: "err", msg: String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="settings-section">
+      <h3 className="settings-section-title">Data</h3>
+
+      <div className="settings-group settings-group--column">
+        <label className="settings-row-label">Export</label>
+        <p className="settings-help-text">
+          Saves all connections and groups to a JSON file. Passwords are stored in the OS keyring
+          and are not included.
+        </p>
+        <button className="btn btn--ghost data-action-btn" onClick={handleExport} disabled={busy}>
+          <Download size={13} /> Export connections…
+        </button>
+      </div>
+
+      <div className="settings-group settings-group--column" style={{ marginTop: 8 }}>
+        <label className="settings-row-label">Import</label>
+        <p className="settings-help-text">Load connections from a previously exported JSON file.</p>
+        <div className="data-import-mode">
+          {(["merge", "replace"] as const).map((m) => (
+            <label key={m} className="data-radio-label">
+              <input
+                type="radio"
+                name="import-mode"
+                value={m}
+                checked={importMode === m}
+                onChange={() => setImportMode(m)}
+              />
+              {m === "merge" ? "Merge (skip duplicates)" : "Replace all"}
+            </label>
+          ))}
+        </div>
+        <button className="btn btn--ghost data-action-btn" onClick={handleImport} disabled={busy}>
+          <Upload size={13} /> Import connections…
+        </button>
+      </div>
+
+      {status && (
+        <p className={clsx("data-status", status.type === "err" && "data-status--err")}>
+          {status.msg}
+        </p>
+      )}
     </div>
   );
 }

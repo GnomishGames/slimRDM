@@ -41,6 +41,9 @@ pub fn run() {
             commands::credentials::save_credential,
             commands::credentials::get_credential,
             commands::credentials::delete_credential,
+            // Data
+            commands::data::export_data,
+            commands::data::import_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SlimRDM");
