@@ -75,6 +75,11 @@ html, body, #root {
   border-bottom: 1px solid var(--border);
 }
 
+.sidebar-header-actions {
+  display: flex;
+  gap: 2px;
+}
+
 .app-title {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -150,8 +155,12 @@ html, body, #root {
   flex-shrink: 0;
 }
 
-.conn-icon--ssh { background: #1a3a2a; color: var(--green); }
-.conn-icon--rdp { background: #1a2e3a; color: var(--accent); }
+.conn-icon--ssh { background: #1e222a; color: var(--text-muted); }
+.conn-icon--rdp { background: #1e222a; color: var(--text-muted); }
+
+.conn-icon--connected   { background: #1a3a2a; color: var(--green); }
+.conn-icon--connecting  { background: #2a2a1a; color: var(--yellow); }
+.conn-icon--error       { background: #2a1a1a; color: var(--red); }
 
 .conn-info {
   display: flex;
@@ -187,6 +196,30 @@ html, body, #root {
 .auth-icon--agent    { color: var(--accent); }
 
 /* ── Groups ─────────────────────────────────────────── */
+.group-header-wrap {
+  position: relative;
+}
+
+.new-group-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+}
+
+.new-group-input {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--accent);
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 2px;
+}
+
 .group-header {
   display: flex;
   align-items: center;
@@ -559,6 +592,12 @@ kbd {
   resize: vertical;
   font-family: var(--font-ui);
   min-height: 52px;
+}
+
+.field-select {
+  cursor: pointer;
+  appearance: auto;
+  color-scheme: dark;
 }
 
 .field-browse {

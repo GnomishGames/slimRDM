@@ -3,6 +3,7 @@ import { X, Monitor, Terminal } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { credentials, dialog } from "../../utils/tauri";
 import { FolderOpen } from "lucide-react";
+import { Group } from "../../types";
 import { Connection, ConnectionType, AuthType } from "../../types";
 import clsx from "clsx";
 
@@ -17,7 +18,7 @@ const DEFAULTS: Record<ConnectionType, { port: number; authType: AuthType }> = {
 };
 
 export function AddConnectionModal({ onClose, editing }: Props) {
-  const { addConnection, updateConnection } = useAppStore();
+  const { addConnection, updateConnection, groups } = useAppStore();
   const isEdit = !!editing;
 
   const [connType, setConnType] = useState<ConnectionType>(editing?.connectionType ?? "ssh");
@@ -28,6 +29,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
   const [authType, setAuthType] = useState<AuthType>(editing?.authType ?? "password");
   const [password, setPassword] = useState("");
   const [privateKeyPath, setPrivateKeyPath] = useState(editing?.privateKeyPath ?? "");
+  const [groupId, setGroupId] = useState<string>(editing?.groupId ?? "");
   const [notes, setNotes] = useState(editing?.notes ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -88,6 +90,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
           username: username.trim(),
           connectionType: connType,
           authType,
+          groupId: groupId || undefined,
           privateKeyPath: authType === "public_key" ? privateKeyPath.trim() : undefined,
           credentialRef,
           notes: notes.trim() || undefined,
@@ -100,6 +103,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
           username: username.trim(),
           connectionType: connType,
           authType,
+          groupId: groupId || undefined,
           privateKeyPath: authType === "public_key" ? privateKeyPath.trim() : undefined,
           credentialRef,
           notes: notes.trim() || undefined,
@@ -182,6 +186,17 @@ export function AddConnectionModal({ onClose, editing }: Props) {
                   <FolderOpen size={14} />
                 </button>
               </div>
+            </Field>
+          )}
+
+          {groups.length > 0 && (
+            <Field label="Group">
+              <select className="field-input field-select" value={groupId} onChange={e => setGroupId(e.target.value)}>
+                <option value="">No group</option>
+                {groups.map((g: Group) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
             </Field>
           )}
 

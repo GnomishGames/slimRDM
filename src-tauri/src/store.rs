@@ -71,6 +71,14 @@ pub struct NewConnection {
     pub tags: Vec<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewGroup {
+    pub name: String,
+    pub color: Option<String>,
+    pub icon: Option<String>,
+}
+
 const STORE_FILE: &str = "slimrdm.json";
 
 pub fn init(_app: &AppHandle) -> anyhow::Result<()> {

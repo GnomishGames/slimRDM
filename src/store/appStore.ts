@@ -77,7 +77,12 @@ export const useAppStore = create<AppState>((set) => ({
 
   deleteGroup: async (id) => {
     await invoke("delete_group", { id });
-    set((s) => ({ groups: s.groups.filter((g) => g.id !== id) }));
+    set((s) => ({
+      groups: s.groups.filter((g) => g.id !== id),
+      connections: s.connections.map((c) =>
+        c.groupId === id ? { ...c, groupId: undefined } : c
+      ),
+    }));
   },
 
   openSession: (connection) => {
