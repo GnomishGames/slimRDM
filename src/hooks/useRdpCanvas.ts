@@ -115,14 +115,20 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
           if (!ctx) return;
 
           const { x, y, width, height, fullWidth, fullHeight, data } = event.payload;
+          // Set canvas internal resolution to match RDP desktop size
           if (canvas.width !== fullWidth) canvas.width = fullWidth;
           if (canvas.height !== fullHeight) canvas.height = fullHeight;
 
-          // Raw RGBA — no PNG decode step, synchronous
-          const raw = atob(data);
-          const bytes = new Uint8ClampedArray(raw.length);
-          for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-          ctx.putImageData(new ImageData(bytes, width, height), x, y);
+          // Raw RGBA — decode base64 to Uint8ClampedArray
+          const binary = atob(data);
+          const bytes = new Uint8ClampedArray(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          // Create ImageData — RGBA is 4 bytes per pixel
+          const imageData = new ImageData(bytes, width, height);
+          ctx.putImageData(imageData, x, y);
+          // Force browser repaint — putImageData() may not trigger compositing
+          // Reading back data forces the browser to flush the canvas buffer
+          ctx.getImageData(0, 0, 1, 1);
         }
       );
 
@@ -132,15 +138,14 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
       }
 
       const canvas = canvasRef.current;
-      const dpr = window.devicePixelRatio || 1;
       await rdp.connect({
         sessionId,
         host: connection.host,
         port: connection.port,
         username: connection.username,
         password,
-        width: Math.round((canvas?.clientWidth ?? 1280) * dpr),
-        height: Math.round((canvas?.clientHeight ?? 800) * dpr),
+        width: canvas?.clientWidth ?? 1280,
+        height: canvas?.clientHeight ?? 800,
       }).catch((err: unknown) => {
         setSessionStatus(sessionId, "error", String(err));
       });
