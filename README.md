@@ -7,7 +7,7 @@ A lightweight, cross-platform RDP & SSH client built with Rust + Tauri + React.
 - **Backend**: Rust (Tauri 2)
 - **Frontend**: React 18 + TypeScript
 - **SSH**: `russh` crate
-- **RDP**: Native client delegation (mstsc on Windows, xfreerdp on Linux/Mac)
+- **RDP**: `ironrdp` — pure-Rust RDP protocol, renders directly to canvas (no xfreerdp/mstsc required, Wayland-compatible)
 - **Terminal emulator**: xterm.js
 - **Credential storage**: OS keyring (Keychain / Windows Credential Manager / libsecret)
 - **Persistence**: `tauri-plugin-store` (JSON file, app data dir)
@@ -21,20 +21,15 @@ A lightweight, cross-platform RDP & SSH client built with Rust + Tauri + React.
 ### Linux
 ```bash
 sudo apt install libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-# For RDP:
-sudo apt install freerdp2-x11
 ```
 
 ### macOS
 ```bash
 xcode-select --install
-# For RDP:
-brew install freerdp
 ```
 
 ### Windows
 - Visual Studio Build Tools with C++ workload
-- RDP via built-in `mstsc` (no extra install needed)
 
 ## Development
 
@@ -61,9 +56,10 @@ slimrdm/
 ├── src/                        # React frontend
 │   ├── components/
 │   │   ├── sidebar/            # Connection list, search, groups
-│   │   └── session/            # Tab bar, terminal panel, RDP panel
+│   │   └── session/            # Tab bar, SSH terminal, RDP canvas
 │   ├── hooks/
-│   │   └── useSshTerminal.ts   # xterm.js + Tauri event bridge
+│   │   ├── useSshTerminal.ts   # xterm.js + Tauri event bridge
+│   │   └── useRdpCanvas.ts     # Canvas renderer + input forwarding
 │   ├── store/
 │   │   └── appStore.ts         # Zustand global state
 │   ├── types/index.ts          # TypeScript types
@@ -74,21 +70,20 @@ slimrdm/
         │   ├── connections.rs  # CRUD for saved connections
         │   ├── groups.rs       # Connection groups
         │   ├── ssh.rs          # SSH session management
-        │   ├── rdp.rs          # RDP process launcher
+        │   ├── rdp.rs          # RDP session (ironrdp, NLA/CredSSP)
         │   └── credentials.rs  # OS keyring integration
-        ├── session.rs          # Session state types
         ├── store.rs            # Serializable data types
         └── lib.rs              # Tauri app setup
 ```
 
 ## Roadmap
 
-- [ ] Add/Edit connection modal with full form validation
-- [ ] SSH key file picker
-- [ ] SSH agent forwarding
-- [ ] Embedded RDP via ironrdp (replace external client)
+- [x] SSH connections (password, public key, agent)
+- [x] Embedded RDP via ironrdp (NLA/CredSSP, Wayland-compatible)
+- [x] Connection groups, search, themes
+- [ ] SSH defaults (port, keepalive, timeout)
+- [ ] Behavior settings (copy-on-select, confirm-close, auto-reconnect)
+- [ ] Connection import/export (JSON)
 - [ ] Session reconnect on disconnect
-- [ ] Tabbed terminal multiplexing (split panes)
-- [ ] Connection import (CSV, RDM format)
+- [ ] Split-pane terminal multiplexing
 - [ ] Vault encryption for credential store
-- [ ] Theming support
