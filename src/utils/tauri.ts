@@ -35,6 +35,17 @@ export const rdp = {
     domain?: string;
     width?: number;
     height?: number;
+    performanceFlags?: {
+      disableWallpaper: boolean;
+      disableFontSmoothing: boolean;
+      disableAnimation: boolean;
+      disableTheme: boolean;
+      disableMenuAnimations: boolean;
+      disableCursorShadow: boolean;
+      disableCursorBlinking: boolean;
+      enableDesktopComposition: boolean;
+    };
+    connectionQuality?: string;
   }) => invoke("rdp_connect", { params }),
 
   disconnect: (sessionId: string) =>

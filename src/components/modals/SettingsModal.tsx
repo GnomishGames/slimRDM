@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { X, Palette, Server, Sliders, Database, Info, Github, ExternalLink, Upload, Download } from "lucide-react";
+import { X, Palette, Server, Monitor, Sliders, Database, Info, Github, ExternalLink, Upload, Download } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useSettingsStore } from "../../store/settingsStore";
 import { useAppStore } from "../../store/appStore";
 import { TERMINAL_THEMES, FONT_FAMILIES } from "../../utils/terminalThemes";
 import { APP_THEMES } from "../../utils/appThemes";
-import { CursorStyle } from "../../types";
+import { CursorStyle, RdpDefaults } from "../../types";
 import { dialog, data } from "../../utils/tauri";
 import clsx from "clsx";
 
@@ -14,11 +14,12 @@ interface Props {
   onClose: () => void;
 }
 
-type NavSection = "appearance" | "ssh-defaults" | "data" | "about";
+type NavSection = "appearance" | "ssh-defaults" | "rdp-defaults" | "data" | "about";
 
 const NAV: { id: NavSection | string; label: string; icon: React.ReactNode; available: boolean }[] = [
   { id: "appearance",   label: "Appearance",   icon: <Palette size={14} />,  available: true },
   { id: "ssh-defaults", label: "SSH Defaults",  icon: <Server size={14} />,  available: true },
+  { id: "rdp-defaults", label: "RDP Defaults",  icon: <Monitor size={14} />, available: true },
   { id: "behavior",     label: "Behavior",      icon: <Sliders size={14} />, available: false },
   { id: "data",         label: "Data",          icon: <Database size={14} />, available: true },
   { id: "about",        label: "About",         icon: <Info size={14} />,    available: true },
@@ -55,6 +56,7 @@ export function SettingsModal({ onClose }: Props) {
           <div className="settings-content">
             {activeSection === "appearance" && <AppearanceSection />}
             {activeSection === "ssh-defaults" && <SshDefaultsSection />}
+            {activeSection === "rdp-defaults" && <RdpDefaultsSection />}
             {activeSection === "data" && <DataSection />}
             {activeSection === "about" && <AboutSection />}
           </div>
@@ -120,6 +122,99 @@ function SshDefaultsSection() {
           <option value={30}>30s</option>
           <option value={60}>60s</option>
         </select>
+      </div>
+    </div>
+  );
+}
+
+function RdpDefaultsSection() {
+  const { rdpDefaults, setRdpDefaults, setRdpPerformanceFlags } = useSettingsStore();
+
+  const qualityPresets: { id: RdpDefaults["connectionQuality"]; label: string; desc: string }[] = [
+    { id: "auto", label: "Auto-detect", desc: "Let Windows negotiate" },
+    { id: "lan", label: "LAN (High-speed)", desc: "Disable most optimizations" },
+    { id: "broadband", label: "Broadband", desc: "Balanced for 10+ Mbps" },
+    { id: "modem", label: "Modem (Low-speed)", desc: "Maximum compression" },
+  ];
+
+  const performanceOptions = [
+    { key: "disableWallpaper" as const, label: "Disable desktop background" },
+    { key: "disableFontSmoothing" as const, label: "Disable font smoothing" },
+    { key: "disableAnimation" as const, label: "Disable animations" },
+    { key: "disableTheme" as const, label: "Disable visual styles" },
+    { key: "disableMenuAnimations" as const, label: "Disable menu animations" },
+    { key: "disableCursorShadow" as const, label: "Disable cursor shadow" },
+    { key: "disableCursorBlinking" as const, label: "Disable cursor blinking" },
+    { key: "enableDesktopComposition" as const, label: "Enable desktop composition" },
+  ];
+
+  return (
+    <div className="settings-section">
+      <h3 className="settings-section-title">RDP Defaults</h3>
+      <p className="settings-section-desc">Applied when creating new RDP connections.</p>
+
+      {/* ── Connection Quality ─────────────────────── */}
+      <p className="settings-subsection-title">Connection Quality</p>
+      <div className="settings-group settings-group--column">
+        <div className="rdp-quality-grid">
+          {qualityPresets.map((preset) => (
+            <button
+              key={preset.id}
+              className={clsx("rdp-quality-btn", rdpDefaults.connectionQuality === preset.id && "rdp-quality-btn--active")}
+              onClick={() => setRdpDefaults({ connectionQuality: preset.id })}
+            >
+              <span className="rdp-quality-label">{preset.label}</span>
+              <span className="rdp-quality-desc">{preset.desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Performance Flags ─────────────────────── */}
+      <p className="settings-subsection-title" style={{ marginTop: 16 }}>Performance Options</p>
+      <p className="settings-section-desc">Disable visual features to improve responsiveness.</p>
+      <div className="settings-group settings-group--column">
+        {performanceOptions.map((opt) => (
+          <label key={opt.key} className="settings-checkbox-row">
+            <input
+              type="checkbox"
+              checked={rdpDefaults.performanceFlags[opt.key]}
+              onChange={(e) => setRdpPerformanceFlags({ [opt.key]: e.target.checked })}
+            />
+            <span>{opt.label}</span>
+          </label>
+        ))}
+      </div>
+
+      {/* ── Default Size ─────────────────────────── */}
+      <p className="settings-subsection-title" style={{ marginTop: 16 }}>Default Size</p>
+      <div className="settings-row-inline">
+        <div className="settings-group">
+          <label className="settings-row-label">Width</label>
+          <div className="settings-stepper">
+            <button className="stepper-btn" onClick={() => setRdpDefaults({ width: Math.max(800, rdpDefaults.width - 64) })}>−</button>
+            <span className="stepper-value">{rdpDefaults.width}</span>
+            <button className="stepper-btn" onClick={() => setRdpDefaults({ width: Math.min(3840, rdpDefaults.width + 64) })}>+</button>
+          </div>
+        </div>
+        <div className="settings-group">
+          <label className="settings-row-label">Height</label>
+          <div className="settings-stepper">
+            <button className="stepper-btn" onClick={() => setRdpDefaults({ height: Math.max(600, rdpDefaults.height - 64) })}>−</button>
+            <span className="stepper-value">{rdpDefaults.height}</span>
+            <button className="stepper-btn" onClick={() => setRdpDefaults({ height: Math.min(2160, rdpDefaults.height + 64) })}>+</button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Default Port ──────────────────────────── */}
+      <div className="settings-group">
+        <label className="settings-row-label">Default Port</label>
+        <div className="settings-stepper">
+          <button className="stepper-btn" onClick={() => setRdpDefaults({ port: Math.max(1, rdpDefaults.port - 1) })}>−</button>
+          <span className="stepper-value">{rdpDefaults.port}</span>
+          <button className="stepper-btn" onClick={() => setRdpDefaults({ port: Math.min(65535, rdpDefaults.port + 1) })}>+</button>
+        </div>
       </div>
     </div>
   );

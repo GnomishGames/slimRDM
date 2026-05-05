@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { rdp, credentials } from "../utils/tauri";
 import { useAppStore } from "../store/appStore";
+import { useSettingsStore } from "../store/settingsStore";
 import { Connection, SessionStatus } from "../types";
 
 // RDP PointerFlags (from MS-RDPBCGR §2.2.8.1.2.2)
@@ -77,6 +78,7 @@ interface UseRdpCanvasOptions {
 export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasOptions) {
   const setSessionStatus = useAppStore((s) => s.setSessionStatus);
   const closeSession = useAppStore((s) => s.closeSession);
+  const rdpDefaults = useSettingsStore((s) => s.rdpDefaults);
   const connectedRef = useRef(false);
 
   // Connect and listen for frames
@@ -144,8 +146,10 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
         port: connection.port,
         username: connection.username,
         password,
-        width: canvas?.clientWidth ?? 1280,
-        height: canvas?.clientHeight ?? 800,
+        width: canvas?.clientWidth ?? rdpDefaults.width,
+        height: canvas?.clientHeight ?? rdpDefaults.height,
+        performanceFlags: rdpDefaults.performanceFlags,
+        connectionQuality: rdpDefaults.connectionQuality,
       }).catch((err: unknown) => {
         setSessionStatus(sessionId, "error", String(err));
       });

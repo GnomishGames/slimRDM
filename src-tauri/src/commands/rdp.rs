@@ -43,6 +43,21 @@ pub struct RdpConnectParams {
     pub domain: Option<String>,
     pub width: Option<u32>,
     pub height: Option<u32>,
+    pub performance_flags: Option<RdpPerformanceFlags>,
+    pub connection_quality: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RdpPerformanceFlags {
+    pub disable_wallpaper: bool,
+    pub disable_font_smoothing: bool,
+    pub disable_animation: bool,
+    pub disable_theme: bool,
+    pub disable_menu_animations: bool,
+    pub disable_cursor_shadow: bool,
+    pub disable_cursor_blinking: bool,
+    pub enable_desktop_composition: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -131,7 +146,17 @@ async fn run_rdp_session(
         autologon: false,
         enable_audio_playback: false,
         pointer_software_rendering: false,
-        performance_flags: PerformanceFlags::default(),
+        performance_flags: params.performance_flags.as_ref()
+            .map(build_performance_flags)
+            .unwrap_or_else(|| match params.connection_quality.as_deref() {
+                Some("lan") => PerformanceFlags::empty(),
+                Some("broadband") => PerformanceFlags::DISABLE_WALL_PAPER
+                    | PerformanceFlags::DISABLE_FONT_SMOOTHING
+                    | PerformanceFlags::DISABLE_ANIMATION
+                    | PerformanceFlags::DISABLE_MENU_ANIMATIONS,
+                Some("modem") => PerformanceFlags::all(),
+                _ => PerformanceFlags::default(),
+            }),
         desktop_scale_factor: 0,
         hardware_id: None,
         license_cache: None,
@@ -317,4 +342,17 @@ fn send_input(session_id: &str, input: SessionInput) -> Result<(), String> {
         let _ = tx.send(input);
     }
     Ok(())
+}
+
+fn build_performance_flags(flags: &RdpPerformanceFlags) -> PerformanceFlags {
+    let mut pf = PerformanceFlags::empty();
+    if flags.disable_wallpaper { pf |= PerformanceFlags::DISABLE_WALLPAPER; }
+    // ENABLE_FONT_SMOOTHING is inverted - setting it enables smoothing
+    // To disable font smoothing, we leave this flag unset
+    if flags.disable_menu_animations { pf |= PerformanceFlags::DISABLE_MENUANIMATIONS; }
+    if flags.disable_theme { pf |= PerformanceFlags::DISABLE_THEMING; }
+    // DISABLE_CURSORSETTINGS covers both cursor shadow and blinking
+    if flags.disable_cursor_shadow || flags.disable_cursor_blinking { pf |= PerformanceFlags::DISABLE_CURSORSETTINGS; }
+    if flags.enable_desktop_composition { pf |= PerformanceFlags::ENABLE_DESKTOP_COMPOSITION; }
+    pf
 }

@@ -46,6 +46,23 @@ export interface Session {
   error?: string;
 }
 
+export interface RdpDefaults {
+  port: number;
+  width: number;
+  height: number;
+  performanceFlags: {
+    disableWallpaper: boolean;
+    disableFontSmoothing: boolean;
+    disableAnimation: boolean;
+    disableTheme: boolean;
+    disableMenuAnimations: boolean;
+    disableCursorShadow: boolean;
+    disableCursorBlinking: boolean;
+    enableDesktopComposition: boolean;
+  };
+  connectionQuality: "auto" | "lan" | "broadband" | "modem";
+}
+
 export interface SshDefaults {
   username: string;
   port: number;

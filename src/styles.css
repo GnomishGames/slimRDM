@@ -1133,3 +1133,71 @@ kbd {
   background: var(--bg-elevated);
   color: var(--text-primary);
 }
+
+/* ── RDP Settings ─────────────────────────────── */
+.rdp-quality-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  width: 100%;
+}
+
+.rdp-quality-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.rdp-quality-btn:hover {
+  border-color: var(--text-muted);
+}
+
+.rdp-quality-btn--active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.rdp-quality-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.rdp-quality-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.settings-checkbox-row:hover {
+  color: var(--text-primary);
+}
+
+.settings-checkbox-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-row-inline {
+  display: flex;
+  gap: 16px;
+}
+
+.settings-row-inline .settings-group {
+  flex: 1;
+}
