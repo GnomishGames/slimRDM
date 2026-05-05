@@ -57,9 +57,13 @@ struct RdpStatusEvent {
 #[serde(rename_all = "camelCase")]
 struct RdpFrameEvent {
     session_id: String,
+    x: u16,
+    y: u16,
     width: u16,
     height: u16,
-    data: String, // base64 PNG
+    full_width: u16,
+    full_height: u16,
+    data: String, // base64 raw RGBA
 }
 
 #[tauri::command]
@@ -211,17 +215,33 @@ async fn run_rdp_session(
                 ActiveStageOutput::ResponseFrame(frame) => {
                     writer.write_all(&frame).await.map_err(|e| format!("Write error: {e}"))?;
                 }
-                ActiveStageOutput::GraphicsUpdate(_) => {
-                    if last_frame.elapsed() >= Duration::from_millis(50) {
+                ActiveStageOutput::GraphicsUpdate(region) => {
+                    if last_frame.elapsed() >= Duration::from_millis(16) {
                         last_frame = Instant::now();
-                        if let Ok(png) = encode_png(image.data(), image.width(), image.height()) {
-                            let _ = app.emit("rdp-frame", RdpFrameEvent {
-                                session_id: session_id.clone(),
-                                width: image.width(),
-                                height: image.height(),
-                                data: BASE64.encode(&png),
-                            });
+                        let x = region.left as usize;
+                        let y = region.top as usize;
+                        let w = (region.right.saturating_sub(region.left) + 1) as usize;
+                        let h = (region.bottom.saturating_sub(region.top) + 1) as usize;
+                        let stride = image.width() as usize * 4;
+                        let src = image.data();
+                        let mut pixels = Vec::with_capacity(w * h * 4);
+                        for row in y..y + h {
+                            let start = row * stride + x * 4;
+                            let end = start + w * 4;
+                            if end <= src.len() {
+                                pixels.extend_from_slice(&src[start..end]);
+                            }
                         }
+                        let _ = app.emit("rdp-frame", RdpFrameEvent {
+                            session_id: session_id.clone(),
+                            x: region.left,
+                            y: region.top,
+                            width: w as u16,
+                            height: h as u16,
+                            full_width: image.width(),
+                            full_height: image.height(),
+                            data: BASE64.encode(&pixels),
+                        });
                     }
                 }
                 ActiveStageOutput::Terminate(_) => return Ok(()),
@@ -257,15 +277,6 @@ fn handle_input(
     };
 
     stage.process_fastpath_input(image, &events)
-}
-
-fn encode_png(rgba: &[u8], width: u16, height: u16) -> Result<Vec<u8>, String> {
-    use image::{codecs::png::PngEncoder, ExtendedColorType, ImageEncoder};
-    let mut buf = Vec::new();
-    PngEncoder::new(&mut buf)
-        .write_image(rgba, u32::from(width), u32::from(height), ExtendedColorType::Rgba8)
-        .map_err(|e| e.to_string())?;
-    Ok(buf)
 }
 
 fn emit_status(app: &AppHandle, session_id: &str, status: &str, message: Option<String>) {

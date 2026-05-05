@@ -59,36 +59,33 @@ function RdpPanel({ session }: { session: Session }) {
   const { onMouseMove, onMouseDown, onMouseUp, onWheel, onKeyDown, onKeyUp } =
     useRdpCanvas({ sessionId: session.id, connection: session.connection, canvasRef });
 
-  if (session.status === "connecting") {
-    return (
-      <div className="rdp-panel rdp-panel--loading">
-        <div className="rdp-status-dot rdp-status-dot--connecting" />
-        <span>Connecting to {session.connection.host}…</span>
-      </div>
-    );
-  }
-
-  if (session.status === "error") {
-    return (
-      <div className="rdp-panel rdp-panel--error">
-        <div className="rdp-status-dot rdp-status-dot--error" />
-        <span>{session.error}</span>
-      </div>
-    );
-  }
-
   return (
-    <canvas
-      ref={canvasRef}
-      className="rdp-canvas"
-      tabIndex={0}
-      onMouseMove={onMouseMove}
-      onMouseDown={onMouseDown}
-      onMouseUp={onMouseUp}
-      onWheel={onWheel}
-      onKeyDown={onKeyDown}
-      onKeyUp={onKeyUp}
-      onContextMenu={(e) => e.preventDefault()}
-    />
+    <div className="rdp-canvas-wrapper">
+      {/* Canvas is always mounted so clientWidth/Height are available at connect time */}
+      <canvas
+        ref={canvasRef}
+        className="rdp-canvas"
+        tabIndex={0}
+        onMouseMove={onMouseMove}
+        onMouseDown={onMouseDown}
+        onMouseUp={onMouseUp}
+        onWheel={onWheel}
+        onKeyDown={onKeyDown}
+        onKeyUp={onKeyUp}
+        onContextMenu={(e) => e.preventDefault()}
+      />
+      {session.status === "connecting" && (
+        <div className="rdp-overlay rdp-panel--loading">
+          <div className="rdp-status-dot rdp-status-dot--connecting" />
+          <span>Connecting to {session.connection.host}…</span>
+        </div>
+      )}
+      {session.status === "error" && (
+        <div className="rdp-overlay rdp-panel--error">
+          <div className="rdp-status-dot rdp-status-dot--error" />
+          <span>{session.error}</span>
+        </div>
+      )}
+    </div>
   );
 }

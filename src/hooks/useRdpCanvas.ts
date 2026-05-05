@@ -99,7 +99,13 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
         }
       );
 
-      unlistenFrame = await listen<{ sessionId: string; width: number; height: number; data: string }>(
+      unlistenFrame = await listen<{
+        sessionId: string;
+        x: number; y: number;
+        width: number; height: number;
+        fullWidth: number; fullHeight: number;
+        data: string;
+      }>(
         "rdp-frame",
         (event) => {
           if (event.payload.sessionId !== sessionId) return;
@@ -108,13 +114,15 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
           const ctx = canvas.getContext("2d");
           if (!ctx) return;
 
-          const img = new Image();
-          img.onload = () => {
-            if (canvas.width !== event.payload.width) canvas.width = event.payload.width;
-            if (canvas.height !== event.payload.height) canvas.height = event.payload.height;
-            ctx.drawImage(img, 0, 0);
-          };
-          img.src = `data:image/png;base64,${event.payload.data}`;
+          const { x, y, width, height, fullWidth, fullHeight, data } = event.payload;
+          if (canvas.width !== fullWidth) canvas.width = fullWidth;
+          if (canvas.height !== fullHeight) canvas.height = fullHeight;
+
+          // Raw RGBA — no PNG decode step, synchronous
+          const raw = atob(data);
+          const bytes = new Uint8ClampedArray(raw.length);
+          for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+          ctx.putImageData(new ImageData(bytes, width, height), x, y);
         }
       );
 
@@ -124,14 +132,15 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
       }
 
       const canvas = canvasRef.current;
+      const dpr = window.devicePixelRatio || 1;
       await rdp.connect({
         sessionId,
         host: connection.host,
         port: connection.port,
         username: connection.username,
         password,
-        width: canvas?.clientWidth ?? 1280,
-        height: canvas?.clientHeight ?? 800,
+        width: Math.round((canvas?.clientWidth ?? 1280) * dpr),
+        height: Math.round((canvas?.clientHeight ?? 800) * dpr),
       }).catch((err: unknown) => {
         setSessionStatus(sessionId, "error", String(err));
       });
