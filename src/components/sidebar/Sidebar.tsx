@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, Folder, Settings } from "lucide-react";
+import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, Folder, Settings, LockKeyhole, Key, Cpu } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { Connection } from "../../types";
 import { AddConnectionModal } from "../modals/AddConnectionModal";
@@ -102,6 +102,12 @@ export function Sidebar() {
   );
 }
 
+function AuthIcon({ authType }: { authType: string }) {
+  if (authType === "public_key") return <Key size={9} className="auth-icon auth-icon--key" title="Public key" />;
+  if (authType === "agent")      return <Cpu size={9} className="auth-icon auth-icon--agent" title="SSH agent" />;
+  return <LockKeyhole size={9} className="auth-icon auth-icon--password" title="Password" />;
+}
+
 function ConnectionItem({
   conn, onOpen, onDelete, indent
 }: {
@@ -126,7 +132,10 @@ function ConnectionItem({
         </span>
         <span className="conn-info">
           <span className="conn-label">{conn.label}</span>
-          <span className="conn-host">{conn.username}@{conn.host}:{conn.port}</span>
+          <span className="conn-host">
+            <AuthIcon authType={conn.authType} />
+            {conn.username}@{conn.host}:{conn.port}
+          </span>
         </span>
       </button>
 
