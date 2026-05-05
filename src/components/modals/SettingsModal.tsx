@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { X, Palette, Server, Sliders, Database, Info } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Palette, Server, Sliders, Database, Info, Github, ExternalLink } from "lucide-react";
+import { getVersion } from "@tauri-apps/api/app";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useSettingsStore } from "../../store/settingsStore";
 import { TERMINAL_THEMES, FONT_FAMILIES } from "../../utils/terminalThemes";
 import { APP_THEMES } from "../../utils/appThemes";
@@ -10,14 +12,14 @@ interface Props {
   onClose: () => void;
 }
 
-type NavSection = "appearance" | "ssh-defaults";
+type NavSection = "appearance" | "ssh-defaults" | "about";
 
 const NAV: { id: NavSection | string; label: string; icon: React.ReactNode; available: boolean }[] = [
   { id: "appearance",   label: "Appearance",   icon: <Palette size={14} />,  available: true },
   { id: "ssh-defaults", label: "SSH Defaults",  icon: <Server size={14} />,  available: true },
   { id: "behavior",     label: "Behavior",      icon: <Sliders size={14} />, available: false },
   { id: "data",         label: "Data",          icon: <Database size={14} />, available: false },
-  { id: "about",        label: "About",         icon: <Info size={14} />,    available: false },
+  { id: "about",        label: "About",         icon: <Info size={14} />,    available: true },
 ];
 
 export function SettingsModal({ onClose }: Props) {
@@ -51,6 +53,7 @@ export function SettingsModal({ onClose }: Props) {
           <div className="settings-content">
             {activeSection === "appearance" && <AppearanceSection />}
             {activeSection === "ssh-defaults" && <SshDefaultsSection />}
+            {activeSection === "about" && <AboutSection />}
           </div>
         </div>
       </div>
@@ -238,6 +241,55 @@ function AppearanceSection() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AboutSection() {
+  const [version, setVersion] = useState<string>("…");
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => setVersion("unknown"));
+  }, []);
+
+  const openGitHub = () => openUrl("https://github.com/GnomishGames/slimRDM");
+
+  return (
+    <div className="settings-section">
+      <h3 className="settings-section-title">About</h3>
+
+      <div className="about-hero">
+        <span className="about-app-name">SlimRDM</span>
+        <span className="about-version">v{version}</span>
+      </div>
+
+      <button className="about-github-btn" onClick={openGitHub}>
+        <Github size={14} />
+        GnomishGames/slimRDM
+        <ExternalLink size={12} className="about-external-icon" />
+      </button>
+
+      <div className="about-block">
+        <p className="about-block-title">Built with Claude Sonnet</p>
+        <p className="about-block-body">
+          This project was designed and written entirely with Claude Sonnet (Anthropic). Every feature,
+          component, and line of Rust was crafted through conversation — no manual coding required.
+        </p>
+      </div>
+
+      <div className="about-block">
+        <p className="about-block-title">Tech stack</p>
+        <ul className="about-stack-list">
+          <li><span className="about-stack-name">Tauri 2</span> — cross-platform app shell</li>
+          <li><span className="about-stack-name">Rust</span> — backend & SSH/RDP protocol</li>
+          <li><span className="about-stack-name">React 18 + TypeScript</span> — UI</li>
+          <li><span className="about-stack-name">russh</span> — pure-Rust SSH client</li>
+          <li><span className="about-stack-name">ironrdp</span> — pure-Rust RDP client (Wayland-compatible)</li>
+          <li><span className="about-stack-name">xterm.js</span> — terminal emulator</li>
+        </ul>
+      </div>
+
+      <p className="about-license">Released under the MIT License.</p>
     </div>
   );
 }
