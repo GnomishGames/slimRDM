@@ -91,11 +91,20 @@ interface UseRdpCanvasOptions {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
 }
 
+type PendingFrame = {
+  x: number; y: number;
+  width: number; height: number;
+  fullWidth: number; fullHeight: number;
+  data: string;
+};
+
 export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasOptions) {
   const setSessionStatus = useAppStore((s) => s.setSessionStatus);
   const closeSession = useAppStore((s) => s.closeSession);
   const rdpDefaults = useSettingsStore((s) => s.rdpDefaults);
   const connectedRef = useRef(false);
+  const pendingFramesRef = useRef<PendingFrame[]>([]);
+  const rafIdRef = useRef<number | null>(null);
 
   // Connect and listen for frames
   useEffect(() => {
@@ -117,36 +126,39 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
         }
       );
 
-      unlistenFrame = await listen<{
-        sessionId: string;
-        x: number; y: number;
-        width: number; height: number;
-        fullWidth: number; fullHeight: number;
-        data: string;
-      }>(
-        "rdp-frame",
-        (event) => {
-          if (event.payload.sessionId !== sessionId) return;
-          const canvas = canvasRef.current;
-          if (!canvas) return;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return;
+      const flushFrames = () => {
+        rafIdRef.current = null;
+        const frames = pendingFramesRef.current;
+        if (frames.length === 0) return;
+        pendingFramesRef.current = [];
 
-          const { x, y, width, height, fullWidth, fullHeight, data } = event.payload;
-          // Set canvas internal resolution to match RDP desktop size
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        for (const { x, y, width, height, fullWidth, fullHeight, data } of frames) {
           if (canvas.width !== fullWidth) canvas.width = fullWidth;
           if (canvas.height !== fullHeight) canvas.height = fullHeight;
 
-          // Raw RGBA — decode base64 to Uint8ClampedArray
           const binary = atob(data);
           const bytes = new Uint8ClampedArray(binary.length);
           for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-          // Create ImageData — RGBA is 4 bytes per pixel
-          const imageData = new ImageData(bytes, width, height);
-          ctx.putImageData(imageData, x, y);
-          // Force browser repaint — putImageData() may not trigger compositing
-          // Reading back data forces the browser to flush the canvas buffer
-          ctx.getImageData(0, 0, 1, 1);
+          ctx.putImageData(new ImageData(bytes, width, height), x, y);
+        }
+        // One flush per batch — keeps WebKitGTK compositing the full canvas correctly
+        ctx.getImageData(0, 0, 1, 1);
+      };
+
+      unlistenFrame = await listen<{ sessionId: string } & PendingFrame>(
+        "rdp-frame",
+        (event) => {
+          if (event.payload.sessionId !== sessionId) return;
+          const { sessionId: _sid, ...frame } = event.payload;
+          pendingFramesRef.current.push(frame);
+          if (rafIdRef.current === null) {
+            rafIdRef.current = requestAnimationFrame(flushFrames);
+          }
         }
       );
 
@@ -171,6 +183,8 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
     init().catch(console.error);
 
     return () => {
+      if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current);
+      pendingFramesRef.current = [];
       unlistenStatus?.();
       unlistenFrame?.();
       rdp.disconnect(sessionId).catch(() => {});

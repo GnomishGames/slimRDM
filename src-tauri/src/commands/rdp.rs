@@ -202,6 +202,12 @@ async fn run_rdp_session(
         connection_result.desktop_size.height,
     );
     let mut active_stage = ActiveStage::new(connection_result);
+    let frame_budget = match params.connection_quality.as_deref() {
+        Some("lan")       => Duration::from_millis(8),   // ~120fps
+        Some("broadband") => Duration::from_millis(33),  // ~30fps
+        Some("modem")     => Duration::from_millis(100), // ~10fps
+        _                 => Duration::from_millis(16),  // ~60fps (auto/default)
+    };
     let mut last_frame = Instant::now();
     // Union of all dirty regions not yet emitted. Carried across loop iterations
     // so updates are never dropped when the frame timer isn't ready.
@@ -262,7 +268,7 @@ async fn run_rdp_session(
 
         // Emit the accumulated dirty union once per frame budget
         if let Some((left, top, right, bottom)) = pending_dirty {
-            if last_frame.elapsed() >= Duration::from_millis(16) {
+            if last_frame.elapsed() >= frame_budget {
                 last_frame = Instant::now();
                 pending_dirty = None;
                 let x = left as usize;

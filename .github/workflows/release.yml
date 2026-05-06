@@ -67,9 +67,10 @@ jobs:
           releaseBody: |
             ## What's New
 
+            - **RDP rendering improvements** — frame updates are now batched to the monitor refresh cycle via `requestAnimationFrame`, reducing CPU overhead and producing smoother output
+            - **Connection quality now controls frame rate** — LAN cap raised to ~120fps (8ms), broadband ~30fps, modem ~10fps; auto remains ~60fps
             - **Group credentials** — set a shared username + password or SSH key on a group; connections in the group can inherit them with a single toggle
-            - Group header shows a lock or key icon when credentials are configured
-            - Connections using group credentials show a distinct chevron icon (color-coded per auth type)
+            - Group header shows a lock or key icon when credentials are configured; connections using group credentials show a distinct themed chevron icon
             - Fixed modal closing when dragging to select text and releasing outside the modal
 
             ## Downloads
