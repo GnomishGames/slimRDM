@@ -203,6 +203,9 @@ async fn run_rdp_session(
     );
     let mut active_stage = ActiveStage::new(connection_result);
     let mut last_frame = Instant::now();
+    // Union of all dirty regions not yet emitted. Carried across loop iterations
+    // so updates are never dropped when the frame timer isn't ready.
+    let mut pending_dirty: Option<(u16, u16, u16, u16)> = None; // (left, top, right, bottom)
 
     loop {
         let (outputs, resize_bytes) = tokio::select! {
@@ -234,44 +237,62 @@ async fn run_rdp_session(
             writer.write_all(&bytes).await.map_err(|e| format!("Write error: {e}"))?;
         }
 
+        let mut terminate = false;
         for output in outputs {
             match output {
                 ActiveStageOutput::ResponseFrame(frame) => {
                     writer.write_all(&frame).await.map_err(|e| format!("Write error: {e}"))?;
                 }
                 ActiveStageOutput::GraphicsUpdate(region) => {
-                    if last_frame.elapsed() >= Duration::from_millis(16) {
-                        last_frame = Instant::now();
-                        let x = region.left as usize;
-                        let y = region.top as usize;
-                        let w = (region.right.saturating_sub(region.left) + 1) as usize;
-                        let h = (region.bottom.saturating_sub(region.top) + 1) as usize;
-                        let stride = image.width() as usize * 4;
-                        let src = image.data();
-                        let mut pixels = Vec::with_capacity(w * h * 4);
-                        for row in y..y + h {
-                            let start = row * stride + x * 4;
-                            let end = start + w * 4;
-                            if end <= src.len() {
-                                pixels.extend_from_slice(&src[start..end]);
-                            }
-                        }
-                        let _ = app.emit("rdp-frame", RdpFrameEvent {
-                            session_id: session_id.clone(),
-                            x: region.left,
-                            y: region.top,
-                            width: w as u16,
-                            height: h as u16,
-                            full_width: image.width(),
-                            full_height: image.height(),
-                            data: BASE64.encode(&pixels),
-                        });
-                    }
+                    // Merge into pending dirty union — never drop a region
+                    pending_dirty = Some(match pending_dirty {
+                        None => (region.left, region.top, region.right, region.bottom),
+                        Some((l, t, r, b)) => (
+                            l.min(region.left),
+                            t.min(region.top),
+                            r.max(region.right),
+                            b.max(region.bottom),
+                        ),
+                    });
                 }
-                ActiveStageOutput::Terminate(_) => return Ok(()),
+                ActiveStageOutput::Terminate(_) => { terminate = true; }
                 _ => {}
             }
         }
+
+        // Emit the accumulated dirty union once per frame budget
+        if let Some((left, top, right, bottom)) = pending_dirty {
+            if last_frame.elapsed() >= Duration::from_millis(16) {
+                last_frame = Instant::now();
+                pending_dirty = None;
+                let x = left as usize;
+                let y = top as usize;
+                let w = (right.saturating_sub(left) + 1) as usize;
+                let h = (bottom.saturating_sub(top) + 1) as usize;
+                let stride = image.width() as usize * 4;
+                let src = image.data();
+                let mut pixels = Vec::with_capacity(w * h * 4);
+                for row in y..y + h {
+                    let start = row * stride + x * 4;
+                    let end = start + w * 4;
+                    if end <= src.len() {
+                        pixels.extend_from_slice(&src[start..end]);
+                    }
+                }
+                let _ = app.emit("rdp-frame", RdpFrameEvent {
+                    session_id: session_id.clone(),
+                    x: left,
+                    y: top,
+                    width: w as u16,
+                    height: h as u16,
+                    full_width: image.width(),
+                    full_height: image.height(),
+                    data: BASE64.encode(&pixels),
+                });
+            }
+        }
+
+        if terminate { return Ok(()); }
     }
 
     Ok(())
