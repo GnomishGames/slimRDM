@@ -33,6 +33,8 @@ pub struct SshConnectParams {
     pub private_key_passphrase: Option<String>,
     pub keepalive_interval: Option<u32>, // seconds; None = disabled
     pub connect_timeout: Option<u32>,    // seconds; None = no timeout
+    pub initial_cols: Option<u16>,
+    pub initial_rows: Option<u16>,
 }
 
 /// Emitted to frontend for terminal output
@@ -215,7 +217,8 @@ async fn run_ssh_session(
     channel.request_pty(
         false,
         "xterm-256color",
-        80, 24,
+        params.initial_cols.unwrap_or(80) as u32,
+        params.initial_rows.unwrap_or(24) as u32,
         0, 0,
         &[],
     ).await.map_err(|e| format!("PTY request failed: {}", e))?;

@@ -91,6 +91,8 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
                     privateKeyPath: conn.privateKeyPath,
                     keepaliveInterval: sshDefaults.keepaliveInterval,
                     connectTimeout: sshDefaults.connectTimeout,
+                    initialCols: termRef.current?.cols,
+                    initialRows: termRef.current?.rows,
                   });
                 } catch (err) {
                   const msg = String(err);
@@ -159,6 +161,8 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
         privateKeyPath: connection.privateKeyPath,
         keepaliveInterval: sshDefaults.keepaliveInterval,
         connectTimeout: sshDefaults.connectTimeout,
+        initialCols: term?.cols,
+        initialRows: term?.rows,
       });
     } catch (err) {
       const msg = String(err);
