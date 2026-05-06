@@ -14,13 +14,13 @@ interface Props {
   onClose: () => void;
 }
 
-type NavSection = "appearance" | "ssh-defaults" | "rdp-defaults" | "data" | "about";
+type NavSection = "appearance" | "ssh-defaults" | "rdp-defaults" | "behavior" | "data" | "about";
 
 const NAV: { id: NavSection | string; label: string; icon: React.ReactNode; available: boolean }[] = [
   { id: "appearance",   label: "Appearance",   icon: <Palette size={14} />,  available: true },
   { id: "ssh-defaults", label: "SSH Defaults",  icon: <Server size={14} />,  available: true },
   { id: "rdp-defaults", label: "RDP Defaults",  icon: <Monitor size={14} />, available: true },
-  { id: "behavior",     label: "Behavior",      icon: <Sliders size={14} />, available: false },
+  { id: "behavior",     label: "Behavior",      icon: <Sliders size={14} />, available: true },
   { id: "data",         label: "Data",          icon: <Database size={14} />, available: true },
   { id: "about",        label: "About",         icon: <Info size={14} />,    available: true },
 ];
@@ -57,6 +57,7 @@ export function SettingsModal({ onClose }: Props) {
             {activeSection === "appearance" && <AppearanceSection />}
             {activeSection === "ssh-defaults" && <SshDefaultsSection />}
             {activeSection === "rdp-defaults" && <RdpDefaultsSection />}
+            {activeSection === "behavior" && <BehaviorSection />}
             {activeSection === "data" && <DataSection />}
             {activeSection === "about" && <AboutSection />}
           </div>
@@ -339,6 +340,51 @@ function AppearanceSection() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function BehaviorSection() {
+  const { behavior, setBehavior } = useSettingsStore();
+
+  const rows: { key: keyof typeof behavior; label: string; help: string }[] = [
+    {
+      key: "copyOnSelect",
+      label: "Copy on Select",
+      help: "Automatically copy terminal selections to clipboard.",
+    },
+    {
+      key: "confirmCloseTab",
+      label: "Confirm Before Closing Tab",
+      help: "Ask for confirmation when closing an active session tab.",
+    },
+    {
+      key: "autoReconnect",
+      label: "Auto-Reconnect",
+      help: "Automatically reconnect SSH sessions after unexpected disconnects.",
+    },
+  ];
+
+  return (
+    <div className="settings-section">
+      <h3 className="settings-section-title">Behavior</h3>
+
+      {rows.map(({ key, label, help }) => (
+        <div key={key}>
+          <div className="settings-group">
+            <label className="settings-row-label">{label}</label>
+            <button
+              className={clsx("toggle", behavior[key] && "toggle--on")}
+              onClick={() => setBehavior({ [key]: !behavior[key] })}
+              role="switch"
+              aria-checked={behavior[key]}
+            >
+              <span className="toggle-thumb" />
+            </button>
+          </div>
+          <p className="settings-help-text" style={{ marginTop: -8, marginBottom: 8 }}>{help}</p>
+        </div>
+      ))}
     </div>
   );
 }

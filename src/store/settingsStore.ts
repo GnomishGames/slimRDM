@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { Store } from "@tauri-apps/plugin-store";
-import { TerminalSettings, SshDefaults, RdpDefaults } from "../types";
+import { TerminalSettings, SshDefaults, RdpDefaults, BehaviorSettings } from "../types";
 import { applyAppTheme } from "../utils/appThemes";
 
 export const DEFAULT_SSH_DEFAULTS: SshDefaults = {
@@ -27,6 +27,12 @@ export const DEFAULT_RDP_DEFAULTS: RdpDefaults = {
   connectionQuality: "auto",
 };
 
+export const DEFAULT_BEHAVIOR: BehaviorSettings = {
+  copyOnSelect: false,
+  confirmCloseTab: false,
+  autoReconnect: false,
+};
+
 export const DEFAULT_TERMINAL: TerminalSettings = {
   fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace",
   fontSize: 13,
@@ -41,12 +47,14 @@ interface SettingsState {
   appTheme: string;
   sshDefaults: SshDefaults;
   rdpDefaults: RdpDefaults;
+  behavior: BehaviorSettings;
   load: () => Promise<void>;
   setTerminal: (patch: Partial<TerminalSettings>) => void;
   setAppTheme: (theme: string) => void;
   setSshDefaults: (patch: Partial<SshDefaults>) => void;
   setRdpDefaults: (patch: Partial<RdpDefaults>) => void;
   setRdpPerformanceFlags: (patch: Partial<RdpDefaults["performanceFlags"]>) => void;
+  setBehavior: (patch: Partial<BehaviorSettings>) => void;
 }
 
 let _store: Store | null = null;
@@ -60,6 +68,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   appTheme: "github-dark",
   sshDefaults: DEFAULT_SSH_DEFAULTS,
   rdpDefaults: DEFAULT_RDP_DEFAULTS,
+  behavior: DEFAULT_BEHAVIOR,
 
   load: async () => {
     const s = await getStore();
@@ -67,9 +76,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const savedAppTheme = await s.get<string>("appTheme");
     const savedSshDefaults = await s.get<SshDefaults>("sshDefaults");
     const savedRdpDefaults = await s.get<RdpDefaults>("rdpDefaults");
+    const savedBehavior = await s.get<BehaviorSettings>("behavior");
     if (savedTerminal) set({ terminal: { ...DEFAULT_TERMINAL, ...savedTerminal } });
     if (savedSshDefaults) set({ sshDefaults: { ...DEFAULT_SSH_DEFAULTS, ...savedSshDefaults } });
     if (savedRdpDefaults) set({ rdpDefaults: { ...DEFAULT_RDP_DEFAULTS, ...savedRdpDefaults } });
+    if (savedBehavior) set({ behavior: { ...DEFAULT_BEHAVIOR, ...savedBehavior } });
     const appTheme = savedAppTheme ?? "github-dark";
     set({ appTheme });
     applyAppTheme(appTheme);
@@ -104,5 +115,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const next = { ...current, performanceFlags: { ...current.performanceFlags, ...patch } };
     set({ rdpDefaults: next });
     getStore().then((s) => { s.set("rdpDefaults", next); s.save(); });
+  },
+
+  setBehavior: (patch) => {
+    const next = { ...get().behavior, ...patch };
+    set({ behavior: next });
+    getStore().then((s) => { s.set("behavior", next); s.save(); });
   },
 }));

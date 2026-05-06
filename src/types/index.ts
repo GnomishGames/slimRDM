@@ -70,6 +70,12 @@ export interface SshDefaults {
   connectTimeout: number;    // seconds
 }
 
+export interface BehaviorSettings {
+  copyOnSelect: boolean;
+  confirmCloseTab: boolean;
+  autoReconnect: boolean;
+}
+
 export interface NewConnectionForm {
   label: string;
   host: string;

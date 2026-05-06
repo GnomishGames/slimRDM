@@ -1,5 +1,6 @@
 import { X, Monitor, Terminal } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
+import { useSettingsStore } from "../../store/settingsStore";
 import { Session } from "../../types";
 import clsx from "clsx";
 
@@ -49,7 +50,12 @@ function Tab({
       <span className="tab-label">{session.connection.label}</span>
       <button
         className="tab-close"
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          const { behavior } = useSettingsStore.getState();
+          if (behavior.confirmCloseTab && !window.confirm(`Close "${session.connection.label}"?`)) return;
+          onClose();
+        }}
       >
         <X size={11} />
       </button>
