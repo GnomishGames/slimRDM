@@ -28,6 +28,12 @@
 
   --radius: 6px;
   --radius-sm: 4px;
+
+  --color-scheme: dark;
+}
+
+:root {
+  color-scheme: var(--color-scheme, dark);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -628,7 +634,7 @@ kbd {
 .field-select {
   cursor: pointer;
   appearance: auto;
-  color-scheme: dark;
+  color-scheme: var(--color-scheme, dark);
 }
 
 .field-browse {

@@ -17,12 +17,14 @@ export interface AppThemeVars {
 
 export interface AppThemeEntry {
   label: string;
+  colorScheme: "light" | "dark";
   vars: AppThemeVars;
 }
 
 export const APP_THEMES: Record<string, AppThemeEntry> = {
   "github-dark": {
     label: "GitHub Dark",
+    colorScheme: "dark",
     vars: {
       "--bg-base": "#0d1117",
       "--bg-surface": "#161b22",
@@ -42,6 +44,7 @@ export const APP_THEMES: Record<string, AppThemeEntry> = {
   },
   "midnight": {
     label: "Midnight",
+    colorScheme: "dark",
     vars: {
       "--bg-base": "#080c10",
       "--bg-surface": "#0d1117",
@@ -61,6 +64,7 @@ export const APP_THEMES: Record<string, AppThemeEntry> = {
   },
   "dracula": {
     label: "Dracula",
+    colorScheme: "dark",
     vars: {
       "--bg-base": "#1e1f29",
       "--bg-surface": "#282a36",
@@ -80,6 +84,7 @@ export const APP_THEMES: Record<string, AppThemeEntry> = {
   },
   "nord": {
     label: "Nord",
+    colorScheme: "dark",
     vars: {
       "--bg-base": "#242933",
       "--bg-surface": "#2e3440",
@@ -99,6 +104,7 @@ export const APP_THEMES: Record<string, AppThemeEntry> = {
   },
   "catppuccin": {
     label: "Catppuccin",
+    colorScheme: "dark",
     vars: {
       "--bg-base": "#11111b",
       "--bg-surface": "#1e1e2e",
@@ -118,6 +124,7 @@ export const APP_THEMES: Record<string, AppThemeEntry> = {
   },
   "one-dark": {
     label: "One Dark",
+    colorScheme: "dark",
     vars: {
       "--bg-base": "#21252b",
       "--bg-surface": "#282c34",
@@ -135,6 +142,46 @@ export const APP_THEMES: Record<string, AppThemeEntry> = {
       "--yellow": "#e5c07b",
     },
   },
+  "github-light": {
+    label: "GitHub Light",
+    colorScheme: "light",
+    vars: {
+      "--bg-base": "#ffffff",
+      "--bg-surface": "#f6f8fa",
+      "--bg-elevated": "#eaeef2",
+      "--bg-hover": "#d0d7de",
+      "--border": "#d0d7de",
+      "--border-subtle": "#eaeef2",
+      "--text-primary": "#1f2328",
+      "--text-secondary": "#656d76",
+      "--text-muted": "#9198a1",
+      "--accent": "#0969da",
+      "--accent-dim": "#0969da22",
+      "--green": "#1a7f37",
+      "--red": "#d1242f",
+      "--yellow": "#9a6700",
+    },
+  },
+  "solarized-light": {
+    label: "Solarized Light",
+    colorScheme: "light",
+    vars: {
+      "--bg-base": "#fdf6e3",
+      "--bg-surface": "#eee8d5",
+      "--bg-elevated": "#e0d9c6",
+      "--bg-hover": "#d3ccb8",
+      "--border": "#c4bba6",
+      "--border-subtle": "#ddd6c2",
+      "--text-primary": "#586e75",
+      "--text-secondary": "#657b83",
+      "--text-muted": "#93a1a1",
+      "--accent": "#268bd2",
+      "--accent-dim": "#268bd222",
+      "--green": "#859900",
+      "--red": "#dc322f",
+      "--yellow": "#b58900",
+    },
+  },
 };
 
 export function applyAppTheme(key: string): void {
@@ -143,4 +190,5 @@ export function applyAppTheme(key: string): void {
   for (const [prop, value] of Object.entries(entry.vars)) {
     root.style.setProperty(prop, value);
   }
+  root.style.setProperty("--color-scheme", entry.colorScheme);
 }

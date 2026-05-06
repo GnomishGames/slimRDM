@@ -92,6 +92,34 @@ export const TERMINAL_THEMES: Record<string, ThemeEntry> = {
       brightCyan: "#7dcfff", brightWhite: "#c0caf5",
     },
   },
+  "github-light": {
+    label: "GitHub Light",
+    bg: "#ffffff",
+    accent: "#0969da",
+    theme: {
+      background: "#ffffff", foreground: "#1f2328", cursor: "#0969da",
+      selectionBackground: "#b6d4fb",
+      black: "#24292f", red: "#d1242f", green: "#1a7f37", yellow: "#9a6700",
+      blue: "#0969da", magenta: "#8250df", cyan: "#0550ae", white: "#6e7781",
+      brightBlack: "#57606a", brightRed: "#a40e26", brightGreen: "#116329",
+      brightYellow: "#744500", brightBlue: "#218bff", brightMagenta: "#a475f9",
+      brightCyan: "#0969da", brightWhite: "#1f2328",
+    },
+  },
+  "solarized-light": {
+    label: "Solarized Light",
+    bg: "#fdf6e3",
+    accent: "#268bd2",
+    theme: {
+      background: "#fdf6e3", foreground: "#657b83", cursor: "#839496",
+      selectionBackground: "#eee8d5",
+      black: "#073642", red: "#dc322f", green: "#859900", yellow: "#b58900",
+      blue: "#268bd2", magenta: "#d33682", cyan: "#2aa198", white: "#eee8d5",
+      brightBlack: "#002b36", brightRed: "#cb4b16", brightGreen: "#586e75",
+      brightYellow: "#657b83", brightBlue: "#839496", brightMagenta: "#6c71c4",
+      brightCyan: "#93a1a1", brightWhite: "#fdf6e3",
+    },
+  },
 };
 
 export function getTheme(key: string): ITheme {
