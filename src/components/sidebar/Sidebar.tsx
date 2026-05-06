@@ -214,7 +214,14 @@ function ConnectionItem({
   const [editing, setEditing] = useState(false);
   const isRdp = conn.connectionType === "rdp";
   const session = useAppStore((s) => s.sessions.find((sess) => sess.connectionId === conn.id));
+  const addConnection = useAppStore((s) => s.addConnection);
   const connStatus = session?.status ?? "idle";
+
+  const handleDuplicate = async () => {
+    const { id: _id, createdAt: _ts, lastConnected: _lc, ...rest } = conn;
+    await addConnection({ ...rest, label: `${conn.label} (copy)` });
+    setShowMenu(false);
+  };
 
   return (
     <>
@@ -242,6 +249,7 @@ function ConnectionItem({
           <div className="context-menu" onMouseDown={(e) => e.preventDefault()}>
             <button onClick={() => { onOpen(conn); setShowMenu(false); }}>Connect</button>
             <button onClick={() => { setEditing(true); setShowMenu(false); }}>Edit</button>
+            <button onClick={handleDuplicate}>Duplicate</button>
             <button onClick={() => { onDelete(conn.id); setShowMenu(false); }} className="danger">Delete</button>
           </div>
         )}
