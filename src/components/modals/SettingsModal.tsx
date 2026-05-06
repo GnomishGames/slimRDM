@@ -382,7 +382,7 @@ function BehaviorSection() {
               <span className="toggle-thumb" />
             </button>
           </div>
-          <p className="settings-help-text" style={{ marginTop: -8, marginBottom: 8 }}>{help}</p>
+          <p className="settings-help-text">{help}</p>
         </div>
       ))}
     </div>
@@ -487,36 +487,4 @@ function AboutSection() {
 
       <div className="about-hero">
         <span className="about-app-name">SlimRDM</span>
-        <span className="about-version">v{version}</span>
-      </div>
-
-      <button className="about-github-btn" onClick={openGitHub}>
-        <Github size={14} />
-        GnomishGames/slimRDM
-        <ExternalLink size={12} className="about-external-icon" />
-      </button>
-
-      <div className="about-block">
-        <p className="about-block-title">Built with Claude Sonnet</p>
-        <p className="about-block-body">
-          This project was designed and written entirely with Claude Sonnet (Anthropic). Every feature,
-          component, and line of Rust was crafted through conversation — no manual coding required.
-        </p>
-      </div>
-
-      <div className="about-block">
-        <p className="about-block-title">Tech stack</p>
-        <ul className="about-stack-list">
-          <li><span className="about-stack-name">Tauri 2</span> — cross-platform app shell</li>
-          <li><span className="about-stack-name">Rust</span> — backend & SSH/RDP protocol</li>
-          <li><span className="about-stack-name">React 18 + TypeScript</span> — UI</li>
-          <li><span className="about-stack-name">russh</span> — pure-Rust SSH client</li>
-          <li><span className="about-stack-name">ironrdp</span> — pure-Rust RDP client (Wayland-compatible)</li>
-          <li><span className="about-stack-name">xterm.js</span> — terminal emulator</li>
-        </ul>
-      </div>
-
-      <p className="about-license">Released under the MIT License.</p>
-    </div>
-  );
-}
+        <span clas
