@@ -65,6 +65,11 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: SlimRDM ${{ github.ref_name }}
           releaseBody: |
+            ## What's New
+
+            - Fixed update checker — HTTPS requests to GitHub now work correctly (missing TLS backend)
+            - Update downloads the right format: detects whether you're running the AppImage or `.deb` and offers the matching file
+
             ## Downloads
 
             | Platform | File | Notes |
