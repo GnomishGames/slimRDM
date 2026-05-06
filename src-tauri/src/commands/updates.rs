@@ -41,8 +41,10 @@ fn is_newer(latest: &str, current: &str) -> bool {
 }
 
 fn pick_asset_url(assets: &[GithubAsset]) -> Option<String> {
+    let running_appimage = std::env::var("APPIMAGE").is_ok();
     let preferred: &[&str] = match std::env::consts::OS {
-        "linux"   => &[".deb", ".appimage"],
+        "linux" if running_appimage => &[".appimage", ".deb"],
+        "linux"                     => &[".deb", ".appimage"],
         "windows" => &[".msi", "_setup.exe", "-installer.exe"],
         "macos"   => &[".dmg"],
         _ => return None,
