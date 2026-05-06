@@ -167,5 +167,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
     }
   }, [sessionId, connection]);
 
-  return { connect, term: termRef };
+  const fit = () => fitAddonRef.current?.fit();
+
+  return { connect, term: termRef, fit };
 }
