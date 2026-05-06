@@ -24,7 +24,7 @@ export function SessionPanel({ session, active }: Props) {
 
 function SshPanel({ session, active }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { connect } = useSshTerminal({
+  const { connect, term } = useSshTerminal({
     sessionId: session.id,
     connection: session.connection,
     containerRef,
@@ -44,6 +44,10 @@ function SshPanel({ session, active }: Props) {
     };
     init().catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (active) term.current?.focus();
+  }, [active]);
 
   return (
     <div
