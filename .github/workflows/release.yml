@@ -67,10 +67,13 @@ jobs:
           releaseBody: |
             ## What's New
 
+            - **Light mode themes** — two new app themes: GitHub Light and Solarized Light, each with a matching terminal color scheme; native UI elements (scrollbars, dropdowns) also adapt correctly
+            - **Duplicate connection** — right-click any connection to clone it instantly, including its credentials reference
             - **RDP rendering improvements** — frame updates are now batched to the monitor refresh cycle via `requestAnimationFrame`, reducing CPU overhead and producing smoother output
             - **Connection quality now controls frame rate** — LAN cap raised to ~120fps (8ms), broadband ~30fps, modem ~10fps; auto remains ~60fps
             - **Group credentials** — set a shared username + password or SSH key on a group; connections in the group can inherit them with a single toggle
             - Group header shows a lock or key icon when credentials are configured; connections using group credentials show a distinct themed chevron icon
+            - Fixed cursor clipping at the bottom of the buffer on Windows
             - Fixed modal closing when dragging to select text and releasing outside the modal
 
             ## Downloads
