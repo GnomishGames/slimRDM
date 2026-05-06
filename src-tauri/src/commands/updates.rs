@@ -41,16 +41,14 @@ fn is_newer(latest: &str, current: &str) -> bool {
 }
 
 fn pick_asset_url(assets: &[GithubAsset]) -> Option<String> {
-    let os = std::env::consts::OS;
-    for asset in assets {
-        let name = asset.name.to_lowercase();
-        let matches = match os {
-            "linux"   => name.ends_with(".deb") || name.ends_with(".appimage"),
-            "windows" => name.ends_with(".msi") || name.ends_with("_setup.exe") || name.ends_with("-installer.exe"),
-            "macos"   => name.ends_with(".dmg"),
-            _ => false,
-        };
-        if matches {
+    let preferred: &[&str] = match std::env::consts::OS {
+        "linux"   => &[".deb", ".appimage"],
+        "windows" => &[".msi", "_setup.exe", "-installer.exe"],
+        "macos"   => &[".dmg"],
+        _ => return None,
+    };
+    for ext in preferred {
+        if let Some(asset) = assets.iter().find(|a| a.name.to_lowercase().ends_with(ext)) {
             return Some(asset.browser_download_url.clone());
         }
     }
