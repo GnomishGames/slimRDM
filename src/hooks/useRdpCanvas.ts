@@ -69,6 +69,22 @@ const SCANCODE: Record<string, { code: number; extended?: boolean }> = {
   ContextMenu: { code: 0x5d, extended: true },
 };
 
+async function resolveCredentials(conn: Connection): Promise<{ username: string; password?: string }> {
+  if (conn.useGroupCredentials && conn.groupId) {
+    const group = useAppStore.getState().groups.find((g) => g.id === conn.groupId);
+    if (group?.username) {
+      const password = group.credentialRef
+        ? await credentials.get(group.credentialRef).catch(() => undefined)
+        : undefined;
+      return { username: group.username, password };
+    }
+  }
+  const password = conn.credentialRef
+    ? await credentials.get(conn.credentialRef).catch(() => undefined)
+    : undefined;
+  return { username: conn.username, password };
+}
+
 interface UseRdpCanvasOptions {
   sessionId: string;
   connection: Connection;
@@ -134,17 +150,14 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
         }
       );
 
-      let password: string | undefined;
-      if (connection.credentialRef) {
-        password = await credentials.get(connection.credentialRef).catch(() => undefined);
-      }
+      const { username: resolvedUsername, password } = await resolveCredentials(connection);
 
       const canvas = canvasRef.current;
       await rdp.connect({
         sessionId,
         host: connection.host,
         port: connection.port,
-        username: connection.username,
+        username: resolvedUsername,
         password,
         width: canvas?.clientWidth ?? rdpDefaults.width,
         height: canvas?.clientHeight ?? rdpDefaults.height,

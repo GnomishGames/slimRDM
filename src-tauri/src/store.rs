@@ -21,6 +21,8 @@ pub struct Connection {
     pub tags: Vec<String>,
     pub created_at: u64,
     pub last_connected: Option<u64>,
+    #[serde(default)]
+    pub use_group_credentials: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -46,6 +48,10 @@ pub struct Group {
     pub parent_id: Option<String>,
     pub color: Option<String>,
     pub icon: Option<String>,
+    pub username: Option<String>,
+    pub credential_ref: Option<String>,
+    pub auth_type: Option<AuthType>,
+    pub private_key_path: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -69,6 +75,8 @@ pub struct NewConnection {
     pub credential_ref: Option<String>,
     pub notes: Option<String>,
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub use_group_credentials: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -77,6 +85,19 @@ pub struct NewGroup {
     pub name: String,
     pub color: Option<String>,
     pub icon: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateGroup {
+    pub id: String,
+    pub name: String,
+    pub color: Option<String>,
+    pub icon: Option<String>,
+    pub username: Option<String>,
+    pub credential_ref: Option<String>,
+    pub auth_type: Option<AuthType>,
+    pub private_key_path: Option<String>,
 }
 
 pub fn init(_app: &AppHandle) -> anyhow::Result<()> {

@@ -21,6 +21,7 @@ interface AppState {
   updateConnection: (conn: Connection) => Promise<void>;
   deleteConnection: (id: string) => Promise<void>;
   addGroup: (group: Omit<Group, "id">) => Promise<Group>;
+  updateGroup: (group: Group) => Promise<void>;
   deleteGroup: (id: string) => Promise<void>;
 
   openSession: (connection: Connection) => string;
@@ -73,6 +74,11 @@ export const useAppStore = create<AppState>((set) => ({
     const added = await invoke<Group>("add_group", { group });
     set((s) => ({ groups: [...s.groups, added] }));
     return added;
+  },
+
+  updateGroup: async (group) => {
+    const updated = await invoke<Group>("update_group", { group });
+    set((s) => ({ groups: s.groups.map((g) => (g.id === updated.id ? updated : g)) }));
   },
 
   deleteGroup: async (id) => {

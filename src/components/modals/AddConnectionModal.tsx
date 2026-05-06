@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Monitor, Terminal } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { useSettingsStore } from "../../store/settingsStore";
@@ -20,6 +20,7 @@ const DEFAULTS: Record<ConnectionType, { port: number; authType: AuthType }> = {
 
 export function AddConnectionModal({ onClose, editing }: Props) {
   const { addConnection, updateConnection, groups } = useAppStore();
+  const mouseDownOnBackdrop = useRef(false);
   const sshDefaults = useSettingsStore((s) => s.sshDefaults);
   const isEdit = !!editing;
 
@@ -32,9 +33,13 @@ export function AddConnectionModal({ onClose, editing }: Props) {
   const [password, setPassword] = useState("");
   const [privateKeyPath, setPrivateKeyPath] = useState(editing?.privateKeyPath ?? "");
   const [groupId, setGroupId] = useState<string>(editing?.groupId ?? "");
+  const [useGroupCredentials, setUseGroupCredentials] = useState(editing?.useGroupCredentials ?? false);
   const [notes, setNotes] = useState(editing?.notes ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+
+  const selectedGroup = groups.find((g: Group) => g.id === groupId);
+  const groupHasCredentials = !!(selectedGroup?.credentialRef || selectedGroup?.privateKeyPath);
 
   // Pre-load existing password when editing
   useEffect(() => {
@@ -57,9 +62,9 @@ export function AddConnectionModal({ onClose, editing }: Props) {
     if (!label.trim()) e.label = "Required";
     if (!host.trim()) e.host = "Required";
     if (!port || port < 1 || port > 65535) e.port = "1–65535";
-    if (!username.trim()) e.username = "Required";
-    if (authType === "password" && !isEdit && !password) e.password = "Required";
-    if (authType === "public_key" && !privateKeyPath.trim()) e.privateKeyPath = "Required";
+    if (!username.trim() && !useGroupCredentials) e.username = "Required";
+    if (authType === "password" && !isEdit && !password && !useGroupCredentials) e.password = "Required";
+    if (authType === "public_key" && !privateKeyPath.trim() && !useGroupCredentials) e.privateKeyPath = "Required";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -84,6 +89,8 @@ export function AddConnectionModal({ onClose, editing }: Props) {
         credentialRef = undefined;
       }
 
+      const effectiveGroupCredentials = useGroupCredentials && groupHasCredentials;
+
       if (isEdit) {
         await updateConnection({
           ...editing,
@@ -97,6 +104,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
           privateKeyPath: authType === "public_key" ? privateKeyPath.trim() : undefined,
           credentialRef,
           notes: notes.trim() || undefined,
+          useGroupCredentials: effectiveGroupCredentials,
         });
       } else {
         await addConnection({
@@ -111,6 +119,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
           credentialRef,
           notes: notes.trim() || undefined,
           tags: [],
+          useGroupCredentials: effectiveGroupCredentials,
         });
       }
       onClose();
@@ -122,7 +131,11 @@ export function AddConnectionModal({ onClose, editing }: Props) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => { mouseDownOnBackdrop.current = e.target === e.currentTarget; }}
+      onClick={() => { if (mouseDownOnBackdrop.current) onClose(); }}
+    >
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{isEdit ? "Edit Connection" : "New Connection"}</span>
@@ -155,11 +168,13 @@ export function AddConnectionModal({ onClose, editing }: Props) {
             </Field>
           </div>
 
-          <Field label="Username" error={errors.username}>
-            <input className={clsx("field-input", errors.username && "field-input--error")} placeholder="admin" value={username} onChange={e => setUsername(e.target.value)} />
-          </Field>
+          {!useGroupCredentials && (
+            <Field label="Username" error={errors.username}>
+              <input className={clsx("field-input", errors.username && "field-input--error")} placeholder="admin" value={username} onChange={e => setUsername(e.target.value)} />
+            </Field>
+          )}
 
-          {connType === "ssh" && (
+          {!useGroupCredentials && connType === "ssh" && (
             <div className="field-row">
               <label className="field-label">Auth</label>
               <div className="auth-tabs">
@@ -172,13 +187,13 @@ export function AddConnectionModal({ onClose, editing }: Props) {
             </div>
           )}
 
-          {authType === "password" && (
+          {!useGroupCredentials && authType === "password" && (
             <Field label={isEdit ? "Password (leave blank to keep existing)" : "Password"} error={errors.password}>
               <input className={clsx("field-input", errors.password && "field-input--error")} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
             </Field>
           )}
 
-          {authType === "public_key" && (
+          {!useGroupCredentials && authType === "public_key" && (
             <Field label="Key path" error={errors.privateKeyPath}>
               <div className="field-browse">
                 <input className={clsx("field-input", errors.privateKeyPath && "field-input--error")} placeholder="~/.ssh/id_rsa" value={privateKeyPath} onChange={e => setPrivateKeyPath(e.target.value)} />
@@ -194,13 +209,31 @@ export function AddConnectionModal({ onClose, editing }: Props) {
 
           {groups.length > 0 && (
             <Field label="Group">
-              <select className="field-input field-select" value={groupId} onChange={e => setGroupId(e.target.value)}>
+              <select className="field-input field-select" value={groupId} onChange={e => { setGroupId(e.target.value); setUseGroupCredentials(false); }}>
                 <option value="">No group</option>
                 {groups.map((g: Group) => (
                   <option key={g.id} value={g.id}>{g.name}</option>
                 ))}
               </select>
             </Field>
+          )}
+
+          {groupHasCredentials && (
+            <div className="field-row">
+              <label className="field-label">Group credentials</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  type="button"
+                  className={clsx("toggle", useGroupCredentials && "toggle--on")}
+                  onClick={() => setUseGroupCredentials((v) => !v)}
+                >
+                  <span className="toggle-thumb" />
+                </button>
+                <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                  {useGroupCredentials ? "Using group credentials" : "Using own credentials"}
+                </span>
+              </div>
+            </div>
           )}
 
           <Field label="Notes">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Palette, Server, Monitor, Sliders, Database, Info, Github, ExternalLink, Upload, Download } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
@@ -27,9 +27,14 @@ const NAV: { id: NavSection | string; label: string; icon: React.ReactNode; avai
 
 export function SettingsModal({ onClose }: Props) {
   const [activeSection, setActiveSection] = useState<NavSection>("appearance");
+  const mouseDownOnBackdrop = useRef(false);
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => { mouseDownOnBackdrop.current = e.target === e.currentTarget; }}
+      onClick={() => { if (mouseDownOnBackdrop.current) onClose(); }}
+    >
       <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">Settings</span>

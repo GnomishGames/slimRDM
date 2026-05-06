@@ -25,6 +25,7 @@ pub fn run() {
             // Groups
             commands::groups::list_groups,
             commands::groups::add_group,
+            commands::groups::update_group,
             commands::groups::delete_group,
             // SSH
             commands::ssh::ssh_connect,

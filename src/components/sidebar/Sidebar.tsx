@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, Folder, FolderPlus, Settings, LockKeyhole, Key, Cpu } from "lucide-react";
+import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, ChevronUp, Folder, FolderPlus, Settings, LockKeyhole, Key, Cpu } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
-import { Connection } from "../../types";
+import { Connection, Group } from "../../types";
 import { AddConnectionModal } from "../modals/AddConnectionModal";
+import { EditGroupModal } from "../modals/EditGroupModal";
 import { SettingsModal } from "../modals/SettingsModal";
+import { credentials } from "../../utils/tauri";
 import clsx from "clsx";
 
 export function Sidebar() {
@@ -16,6 +18,7 @@ export function Sidebar() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [addingGroup, setAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const groupInputRef = useRef<HTMLInputElement>(null);
@@ -56,10 +59,18 @@ export function Sidebar() {
     connections: filtered.filter((c) => c.groupId === g.id),
   }));
 
+  const handleDeleteGroup = async (group: Group) => {
+    if (group.credentialRef) {
+      await credentials.delete(group.credentialRef).catch(() => {});
+    }
+    await deleteGroup(group.id);
+  };
+
   return (
     <>
       {showAddModal && <AddConnectionModal onClose={() => setShowAddModal(false)} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {editingGroup && <EditGroupModal group={editingGroup} onClose={() => setEditingGroup(null)} />}
       <aside className="sidebar">
         <div className="sidebar-header">
           <span className="app-title">SlimRDM</span>
@@ -95,7 +106,8 @@ export function Sidebar() {
               connections={gc}
               expanded={expandedGroups.has(group.id)}
               onToggle={() => toggleGroup(group.id)}
-              onDelete={() => deleteGroup(group.id)}
+              onEdit={() => setEditingGroup(group)}
+              onDelete={() => handleDeleteGroup(group)}
               onOpen={openSession}
               onDeleteConn={deleteConnection}
             />
@@ -136,11 +148,12 @@ export function Sidebar() {
   );
 }
 
-function GroupSection({ group, connections, expanded, onToggle, onDelete, onOpen, onDeleteConn }: {
-  group: { id: string; name: string; color?: string };
+function GroupSection({ group, connections, expanded, onToggle, onEdit, onDelete, onOpen, onDeleteConn }: {
+  group: Group;
   connections: Connection[];
   expanded: boolean;
   onToggle: () => void;
+  onEdit: () => void;
   onDelete: () => void;
   onOpen: (c: Connection) => void;
   onDeleteConn: (id: string) => void;
@@ -159,10 +172,16 @@ function GroupSection({ group, connections, expanded, onToggle, onDelete, onOpen
           {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
           <Folder size={13} className="group-icon" style={{ color: group.color ?? "#58a6ff" }} />
           <span className="group-name">{group.name}</span>
+          {group.privateKeyPath
+            ? <span title="Group key auth"><Key size={9} className="auth-icon auth-icon--key" /></span>
+            : group.credentialRef
+              ? <span title="Group password auth"><LockKeyhole size={9} className="auth-icon auth-icon--password" /></span>
+              : null}
           <span className="group-count">{connections.length}</span>
         </button>
         {showMenu && (
           <div className="context-menu" onMouseDown={(e) => e.preventDefault()}>
+            <button onClick={() => { onEdit(); setShowMenu(false); }}>Edit Group</button>
             <button onClick={() => { onDelete(); setShowMenu(false); }} className="danger">
               Delete Group
             </button>
@@ -176,7 +195,8 @@ function GroupSection({ group, connections, expanded, onToggle, onDelete, onOpen
   );
 }
 
-function AuthIcon({ authType }: { authType: string }) {
+function AuthIcon({ authType, useGroupCredentials }: { authType: string; useGroupCredentials?: boolean }) {
+  if (useGroupCredentials) return <span title="Using group credentials"><ChevronUp size={9} className="auth-icon auth-icon--group" /></span>;
   if (authType === "public_key") return <span title="Public key"><Key size={9} className="auth-icon auth-icon--key" /></span>;
   if (authType === "agent")      return <span title="SSH agent"><Cpu size={9} className="auth-icon auth-icon--agent" /></span>;
   return <span title="Password"><LockKeyhole size={9} className="auth-icon auth-icon--password" /></span>;
@@ -212,7 +232,7 @@ function ConnectionItem({
           <span className="conn-info">
             <span className="conn-label">{conn.label}</span>
             <span className="conn-host">
-              <AuthIcon authType={conn.authType} />
+              <AuthIcon authType={conn.authType} useGroupCredentials={conn.useGroupCredentials} />
               {conn.username}@{conn.host}:{conn.port}
             </span>
           </span>

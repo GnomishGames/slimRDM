@@ -1,4 +1,4 @@
-use crate::store::{Group, NewGroup, new_id};
+use crate::store::{Group, NewGroup, UpdateGroup, new_id};
 use super::connections::{load_store, save_store};
 
 #[tauri::command]
@@ -17,10 +17,32 @@ pub async fn add_group(app: tauri::AppHandle, group: NewGroup) -> std::result::R
         color: group.color,
         icon: group.icon,
         parent_id: None,
+        username: None,
+        credential_ref: None,
+        auth_type: None,
+        private_key_path: None,
     };
     store.groups.push(g.clone());
     save_store(&app, &store).map_err(|e| e.to_string())?;
     Ok(g)
+}
+
+#[tauri::command]
+pub async fn update_group(app: tauri::AppHandle, group: UpdateGroup) -> std::result::Result<Group, String> {
+    let mut store = load_store(&app).map_err(|e| e.to_string())?;
+    let g = store.groups.iter_mut()
+        .find(|g| g.id == group.id)
+        .ok_or("Group not found")?;
+    g.name = group.name;
+    g.color = group.color;
+    g.icon = group.icon;
+    g.username = group.username;
+    g.credential_ref = group.credential_ref;
+    g.auth_type = group.auth_type;
+    g.private_key_path = group.private_key_path;
+    let updated = g.clone();
+    save_store(&app, &store).map_err(|e| e.to_string())?;
+    Ok(updated)
 }
 
 #[tauri::command]

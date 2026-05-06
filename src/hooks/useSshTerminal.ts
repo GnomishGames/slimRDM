@@ -9,6 +9,32 @@ import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { Connection } from "../types";
 
+async function resolveCredentials(conn: Connection): Promise<{
+  username: string;
+  authType: string;
+  password?: string;
+  privateKeyPath?: string;
+}> {
+  if (conn.useGroupCredentials && conn.groupId) {
+    const group = useAppStore.getState().groups.find((g) => g.id === conn.groupId);
+    if (group?.username) {
+      const groupAuthType = group.authType ?? "password";
+      if (groupAuthType === "public_key") {
+        return { username: group.username, authType: "public_key", privateKeyPath: group.privateKeyPath };
+      }
+      const password = group.credentialRef
+        ? await credentials.get(group.credentialRef).catch(() => undefined)
+        : undefined;
+      return { username: group.username, authType: "password", password };
+    }
+  }
+  let password: string | undefined;
+  if (conn.authType === "password" && conn.credentialRef) {
+    password = await credentials.get(conn.credentialRef).catch(() => undefined);
+  }
+  return { username: conn.username, authType: conn.authType, password, privateKeyPath: conn.privateKeyPath };
+}
+
 interface UseSshTerminalOptions {
   sessionId: string;
   connection: Connection;
@@ -76,19 +102,16 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
               term.writeln("\r\n\x1b[33m● Disconnected. Reconnecting in 3s…\x1b[0m");
               reconnectTimerRef.current = setTimeout(async () => {
                 const conn = connectionRef.current;
-                let password: string | undefined;
-                if (conn.authType === "password" && conn.credentialRef) {
-                  password = await credentials.get(conn.credentialRef).catch(() => undefined);
-                }
+                const resolved = await resolveCredentials(conn);
                 try {
                   await ssh.connect({
                     sessionId,
                     host: conn.host,
                     port: conn.port,
-                    username: conn.username,
-                    authType: conn.authType,
-                    password,
-                    privateKeyPath: conn.privateKeyPath,
+                    username: resolved.username,
+                    authType: resolved.authType,
+                    password: resolved.password,
+                    privateKeyPath: resolved.privateKeyPath ?? conn.privateKeyPath,
                     keepaliveInterval: sshDefaults.keepaliveInterval,
                     connectTimeout: sshDefaults.connectTimeout,
                     initialCols: termRef.current?.cols,
@@ -151,14 +174,15 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
     }
     try {
       const { sshDefaults } = useSettingsStore.getState();
+      const resolved = await resolveCredentials(connection);
       await ssh.connect({
         sessionId,
         host: connection.host,
         port: connection.port,
-        username: connection.username,
-        authType: connection.authType,
-        password,
-        privateKeyPath: connection.privateKeyPath,
+        username: resolved.username,
+        authType: resolved.authType,
+        password: connection.useGroupCredentials ? resolved.password : password,
+        privateKeyPath: resolved.privateKeyPath ?? connection.privateKeyPath,
         keepaliveInterval: sshDefaults.keepaliveInterval,
         connectTimeout: sshDefaults.connectTimeout,
         initialCols: term?.cols,

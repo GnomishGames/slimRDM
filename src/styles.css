@@ -193,7 +193,8 @@ html, body, #root {
 .auth-icon { flex-shrink: 0; opacity: 0.7; }
 .auth-icon--password { color: var(--red); }
 .auth-icon--key      { color: var(--yellow); }
-.auth-icon--agent    { color: var(--accent); }
+.auth-icon--agent    { color: var(--green); }
+.auth-icon--group    { color: var(--accent); }
 
 /* ── Groups ─────────────────────────────────────────── */
 .group-header-wrap {
@@ -1260,4 +1261,38 @@ kbd {
 
 .settings-row-inline .settings-group {
   flex: 1;
+}
+
+/* ── Group credential styles ─────────────────────────── */
+.field-section-divider {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 13px;
+  height: 13px;
+}
+
+.btn--sm {
+  padding: 3px 10px;
+  font-size: 11px;
 }

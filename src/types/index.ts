@@ -27,6 +27,7 @@ export interface Connection {
   tags: string[];
   createdAt: number;
   lastConnected?: number;
+  useGroupCredentials?: boolean;
 }
 
 export interface Group {
@@ -35,6 +36,10 @@ export interface Group {
   parentId?: string;
   color?: string;
   icon?: string;
+  username?: string;
+  credentialRef?: string;
+  authType?: AuthType;
+  privateKeyPath?: string;
 }
 
 export interface Session {

@@ -67,8 +67,10 @@ jobs:
           releaseBody: |
             ## What's New
 
-            - Fixed update checker — HTTPS requests to GitHub now work correctly (missing TLS backend)
-            - Update downloads the right format: detects whether you're running the AppImage or `.deb` and offers the matching file
+            - **Group credentials** — set a shared username + password or SSH key on a group; connections in the group can inherit them with a single toggle
+            - Group header shows a lock or key icon when credentials are configured
+            - Connections using group credentials show a distinct chevron icon (color-coded per auth type)
+            - Fixed modal closing when dragging to select text and releasing outside the modal
 
             ## Downloads
 
