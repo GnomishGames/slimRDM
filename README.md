@@ -71,7 +71,9 @@ slimrdm/
         │   ├── groups.rs       # Connection groups
         │   ├── ssh.rs          # SSH session management
         │   ├── rdp.rs          # RDP session (ironrdp, NLA/CredSSP)
-        │   └── credentials.rs  # OS keyring integration
+        │   ├── credentials.rs  # OS keyring integration
+        │   ├── data.rs         # Import/export
+        │   └── updates.rs      # GitHub release update checker
         ├── store.rs            # Serializable data types
         └── lib.rs              # Tauri app setup
 ```
@@ -81,9 +83,10 @@ slimrdm/
 - [x] SSH connections (password, public key, agent)
 - [x] Embedded RDP via ironrdp (NLA/CredSSP, Wayland-compatible)
 - [x] Connection groups, search, themes
-- [ ] SSH defaults (port, keepalive, timeout)
-- [ ] Behavior settings (copy-on-select, confirm-close, auto-reconnect)
-- [ ] Connection import/export (JSON)
-- [ ] Session reconnect on disconnect
+- [x] SSH defaults (port, keepalive, timeout)
+- [x] Behavior settings (copy-on-select, confirm-close, auto-reconnect)
+- [x] Connection import/export (JSON)
+- [x] Session auto-reconnect on disconnect
+- [x] In-app update checker (Settings → About)
 - [ ] Split-pane terminal multiplexing
 - [ ] Vault encryption for credential store
