@@ -56,6 +56,12 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
     if (!containerRef.current) return;
     const { terminal: settings } = useSettingsStore.getState();
 
+    // Add padding to the container to ensure the cursor and last line of text
+    // are never clipped by the bottom edge of the window. This provides the
+    // "controlled height" requested for better visibility.
+    containerRef.current.style.padding = "2px 6px";
+    containerRef.current.style.boxSizing = "border-box";
+
     const term = new Terminal({
       cursorBlink: settings.cursorBlink,
       cursorStyle: settings.cursorStyle,
@@ -158,6 +164,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
       term.options.scrollback = s.scrollback;
       term.options.cursorStyle = s.cursorStyle;
       term.options.cursorBlink = s.cursorBlink;
+      term.options.lineHeight = 1.2;
       term.options.theme = getTheme(s.theme);
       fitAddonRef.current?.fit();
       term.refresh(0, term.rows - 1);
