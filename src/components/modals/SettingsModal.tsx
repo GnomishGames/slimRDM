@@ -7,7 +7,7 @@ import { useAppStore } from "../../store/appStore";
 import { TERMINAL_THEMES, FONT_FAMILIES } from "../../utils/terminalThemes";
 import { APP_THEMES } from "../../utils/appThemes";
 import { CursorStyle, RdpDefaults } from "../../types";
-import { dialog, data } from "../../utils/tauri";
+import { dialog, data, updates, UpdateInfo } from "../../utils/tauri";
 import clsx from "clsx";
 
 interface Props {
@@ -472,14 +472,32 @@ function DataSection() {
   );
 }
 
+type UpdateState = "idle" | "checking" | "up-to-date" | "available" | "error";
+
 function AboutSection() {
   const [version, setVersion] = useState<string>("…");
+  const [updateState, setUpdateState] = useState<UpdateState>("idle");
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion("unknown"));
   }, []);
 
   const openGitHub = () => openUrl("https://github.com/GnomishGames/slimRDM");
+
+  const handleCheckUpdates = async () => {
+    setUpdateState("checking");
+    setUpdateError(null);
+    try {
+      const info = await updates.check();
+      setUpdateInfo(info);
+      setUpdateState(info.hasUpdate ? "available" : "up-to-date");
+    } catch (err) {
+      setUpdateError(String(err));
+      setUpdateState("error");
+    }
+  };
 
   return (
     <div className="settings-section">
@@ -488,6 +506,43 @@ function AboutSection() {
       <div className="about-hero">
         <span className="about-app-name">SlimRDM</span>
         <span className="about-version">v{version}</span>
+      </div>
+
+      <div className="about-update-row">
+        {updateState === "idle" && (
+          <button className="btn btn--ghost about-update-btn" onClick={handleCheckUpdates}>
+            Check for Updates
+          </button>
+        )}
+        {updateState === "checking" && (
+          <span className="about-update-status">Checking…</span>
+        )}
+        {updateState === "up-to-date" && (
+          <span className="about-update-status about-update-status--ok">You're up to date</span>
+        )}
+        {updateState === "error" && (
+          <span className="about-update-status about-update-status--err">{updateError}</span>
+        )}
+        {updateState === "available" && updateInfo && (
+          <div className="about-update-available">
+            <span className="about-update-badge">v{updateInfo.latestVersion} available</span>
+            {updateInfo.downloadUrl ? (
+              <button
+                className="btn btn--primary about-update-btn"
+                onClick={() => openUrl(updateInfo.downloadUrl!)}
+              >
+                <Download size={13} /> Download
+              </button>
+            ) : (
+              <button className="btn btn--primary about-update-btn" onClick={openGitHub}>
+                <ExternalLink size={13} /> View Release
+              </button>
+            )}
+          </div>
+        )}
+        {(updateState === "up-to-date" || updateState === "error" || updateState === "available") && (
+          <button className="about-recheck-btn" onClick={handleCheckUpdates}>Re-check</button>
+        )}
       </div>
 
       <button className="about-github-btn" onClick={openGitHub}>

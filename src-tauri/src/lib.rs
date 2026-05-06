@@ -44,6 +44,8 @@ pub fn run() {
             // Data
             commands::data::export_data,
             commands::data::import_data,
+            // Updates
+            commands::updates::check_for_updates,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SlimRDM");

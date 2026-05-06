@@ -79,6 +79,18 @@ export const data = {
     invoke<{ connectionsAdded: number; groupsAdded: number }>("import_data", { path, replace }),
 };
 
+export interface UpdateInfo {
+  hasUpdate: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  downloadUrl: string | null;
+  releaseNotes: string | null;
+}
+
+export const updates = {
+  check: () => invoke<UpdateInfo>("check_for_updates"),
+};
+
 export const credentials = {
   save: (refKey: string, password: string) =>
     invoke("save_credential", { refKey, password }),
