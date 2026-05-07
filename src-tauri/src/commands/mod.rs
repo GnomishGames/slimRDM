@@ -1,3 +1,4 @@
+pub mod clipboard;
 pub mod connections;
 pub mod credentials;
 pub mod data;

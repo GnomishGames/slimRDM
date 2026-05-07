@@ -19,6 +19,11 @@ use ironrdp::pdu::rdp::client_info::{PerformanceFlags, TimezoneInfo};
 use ironrdp::pdu::rdp::capability_sets::MajorPlatformType;
 use ironrdp::pdu::gcc::KeyboardType;
 use ironrdp_tokio::{self as rdp_tokio, FramedWrite, TokioFramed};
+use ironrdp_cliprdr::Cliprdr;
+use ironrdp_cliprdr::pdu::ClipboardFormatId;
+use ironrdp_cliprdr::backend::CliprdrBackendFactory;
+
+use crate::commands::clipboard::{TauriCliprdrBackendFactory, TauriCliprdrBackend};
 
 enum SessionInput {
     MouseEvent { flags: u16, x: u16, y: u16 },
@@ -164,6 +169,10 @@ async fn run_rdp_session(
 
     let mut framed = TokioFramed::new(tcp);
     let mut connector = ClientConnector::new(config, client_addr);
+
+    let clipboard_factory = TauriCliprdrBackendFactory::new(app.clone());
+    let cliprdr: Cliprdr<ironrdp_cliprdr::Client> = Cliprdr::new(clipboard_factory.build_cliprdr_backend());
+    let mut connector = connector.with_static_channel(cliprdr);
 
     let should_upgrade = rdp_tokio::connect_begin(&mut framed, &mut connector)
         .await

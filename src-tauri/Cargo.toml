@@ -42,7 +42,8 @@ russh = "0.44"
 russh-keys = "0.44"
 
 # RDP
-ironrdp = { version = "0.14", features = ["connector", "session", "graphics", "pdu"] }
+ironrdp = { version = "0.14", features = ["connector", "session", "graphics", "pdu", "cliprdr", "core"] }
+ironrdp-cliprdr = "0.5"
 ironrdp-tokio = { version = "0.8", features = ["reqwest"] }
 ironrdp-tls = { version = "0.2", features = ["rustls"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
