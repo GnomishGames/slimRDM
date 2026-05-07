@@ -54,6 +54,40 @@ html, body, #root {
   height: 100%;
 }
 
+.update-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  font-size: 13px;
+  color: var(--text-primary);
+  animation: toast-in 0.3s ease;
+  z-index: 300;
+}
+
+.update-toast button {
+  background: var(--accent);
+  border: none;
+  border-radius: 4px;
+  padding: 4px 12px;
+  color: var(--bg-base);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .main-area {
   flex: 1;
   display: flex;
@@ -534,8 +568,9 @@ kbd {
   inset: 0;
   background: rgba(0,0,0,0.6);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  padding-top: 5vh;
   z-index: 200;
 }
 
@@ -745,10 +780,12 @@ kbd {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   width: 620px;
-  max-height: 88vh;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  align-self: flex-start;
+  margin-bottom: 20px;
 }
 
 .settings-layout {
