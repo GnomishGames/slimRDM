@@ -182,6 +182,26 @@ export const APP_THEMES: Record<string, AppThemeEntry> = {
       "--yellow": "#b58900",
     },
   },
+  "monokai-light": {
+    label: "Monokai Light",
+    colorScheme: "light",
+    vars: {
+      "--bg-base": "#faf8f5",
+      "--bg-surface": "#f5f4f1",
+      "--bg-elevated": "#e8e6e1",
+      "--bg-hover": "#ddd9d2",
+      "--border": "#c9c5be",
+      "--border-subtle": "#e0ddd8",
+      "--text-primary": "#49483e",
+      "--text-secondary": "#75715e",
+      "--text-muted": "#a6a28c",
+      "--accent": "#a6e22e",
+      "--accent-dim": "#a6e22e22",
+      "--green": "#a6e22e",
+      "--red": "#f92672",
+      "--yellow": "#e6db74",
+    },
+  },
 };
 
 export function applyAppTheme(key: string): void {

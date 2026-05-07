@@ -188,7 +188,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
           )}
 
           {!useGroupCredentials && authType === "password" && (
-            <Field label={isEdit ? "Password (leave blank to keep existing)" : "Password"} error={errors.password}>
+            <Field label={"Password"} error={errors.password}>
               <input className={clsx("field-input", errors.password && "field-input--error")} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
             </Field>
           )}

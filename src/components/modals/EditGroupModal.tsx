@@ -134,7 +134,7 @@ export function EditGroupModal({ group, onClose }: Props) {
           )}
 
           {username.trim() && authType === "password" && (
-            <Field label={group.credentialRef ? "Password (leave blank to keep existing)" : "Password"}>
+            <Field label={"Password"}>
               <input
                 className="field-input"
                 type="password"

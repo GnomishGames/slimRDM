@@ -67,9 +67,9 @@ jobs:
           releaseBody: |
             ## What's New
 
-            - **Light mode themes** — two new app themes: GitHub Light and Solarized Light, each with a matching terminal color scheme; native UI elements (scrollbars, dropdowns) also adapt correctly
-            - **Duplicate connection** — right-click any connection to clone it instantly, including its credentials reference
-            - Fixed cursor clipping at the bottom of the buffer on Windows
+            - **Alphabetical connection sorting** — connections are now sorted alphabetically by label instead of by creation date
+            - **Monokai Light theme** — added a third light theme option alongside GitHub Light and Solarized Light
+            - **About page update** — now credits both Claude and MiniMax for AI assistance
 
             ## Downloads
 

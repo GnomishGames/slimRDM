@@ -557,10 +557,10 @@ function AboutSection() {
       </button>
 
       <div className="about-block">
-        <p className="about-block-title">Built with Claude Sonnet</p>
+        <p className="about-block-title">Built with AI assistance</p>
         <p className="about-block-body">
-          This project was designed and written entirely with Claude Sonnet (Anthropic). Every feature,
-          component, and line of Rust was crafted through conversation — no manual coding required.
+          This project was designed and written with Claude (Anthropic) and MiniMax. Features, components,
+          and Rust logic were crafted through conversation — minimal manual coding required.
         </p>
       </div>
 
