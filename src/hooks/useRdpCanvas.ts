@@ -23,8 +23,6 @@ const PTR_RIGHT_DOWN  = 0xa000; // RIGHT_BUTTON | DOWN
 const PTR_RIGHT_UP    = 0x2000; // RIGHT_BUTTON only
 const PTR_MID_DOWN    = 0xc000; // MIDDLE | DOWN
 const PTR_MID_UP      = 0x4000; // MIDDLE only
-const PTR_WHEEL       = 0x0200; // VERTICAL_WHEEL
-const PTR_WHEEL_NEG   = 0x0100; // WHEEL_NEGATIVE
 
 // RDP KeyboardFlags
 const KEY_DOWN    = 0x00;
@@ -252,30 +250,29 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
     const { x, y } = canvasCoords(e);
-    rdp.mouseEvent(sessionId, PTR_MOVE, x, y).catch(() => {});
+    rdp.mouseEvent(sessionId, PTR_MOVE, x, y, 0).catch(() => {});
   }, [sessionId]);
 
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
     const { x, y } = canvasCoords(e);
     const flags = e.button === 0 ? PTR_LEFT_DOWN : e.button === 2 ? PTR_RIGHT_DOWN : PTR_MID_DOWN;
-    rdp.mouseEvent(sessionId, flags, x, y).catch(() => {});
+    rdp.mouseEvent(sessionId, flags, x, y, 0).catch(() => {});
   }, [sessionId]);
 
   const onMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
     const { x, y } = canvasCoords(e);
     const flags = e.button === 0 ? PTR_LEFT_UP : e.button === 2 ? PTR_RIGHT_UP : PTR_MID_UP;
-    rdp.mouseEvent(sessionId, flags, x, y).catch(() => {});
+    rdp.mouseEvent(sessionId, flags, x, y, 0).catch(() => {});
   }, [sessionId]);
 
   const onWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
     const { x, y } = canvasCoords(e);
-    const isNeg = e.deltaY > 0;
-    const units = Math.min(Math.abs(Math.round(e.deltaY / 40)), 255);
-    const flags = PTR_WHEEL | (isNeg ? PTR_WHEEL_NEG : 0) | units;
-    rdp.mouseEvent(sessionId, flags, x, y).catch(() => {});
+    const wheelUnits = Math.round(e.deltaY / 20);
+    const clampedUnits = Math.max(-255, Math.min(255, wheelUnits));
+    rdp.mouseEvent(sessionId, 0, x, y, clampedUnits).catch(() => {});
   }, [sessionId]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {

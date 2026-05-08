@@ -26,7 +26,7 @@ use ironrdp_cliprdr::backend::CliprdrBackendFactory;
 use crate::commands::clipboard::{TauriCliprdrBackendFactory, TauriCliprdrBackend, get_clipboard_data, set_clipboard_data};
 
 enum SessionInput {
-    MouseEvent { flags: u16, x: u16, y: u16 },
+    MouseEvent { flags: u16, x: u16, y: u16, wheel_units: i16 },
     KeyEvent { flags: u8, scancode: u8 },
     Resize { width: u16, height: u16 },
     Disconnect,
@@ -319,14 +319,21 @@ fn handle_input(
     input: SessionInput,
 ) -> Result<Vec<ActiveStageOutput>, ironrdp::session::SessionError> {
     let events: Vec<FastPathInputEvent> = match input {
-        SessionInput::MouseEvent { flags, x, y } => vec![
-            FastPathInputEvent::MouseEvent(MousePdu {
-                flags: PointerFlags::from_bits_truncate(flags),
-                number_of_wheel_rotation_units: 0,
-                x_position: x,
-                y_position: y,
-            }),
-        ],
+        SessionInput::MouseEvent { flags, x, y, wheel_units } => {
+            let final_flags = if wheel_units != 0 {
+                PointerFlags::from_bits_truncate(flags | 0x0200)
+            } else {
+                PointerFlags::from_bits_truncate(flags)
+            };
+            vec![
+                FastPathInputEvent::MouseEvent(MousePdu {
+                    flags: final_flags,
+                    number_of_wheel_rotation_units: wheel_units,
+                    x_position: x,
+                    y_position: y,
+                }),
+            ]
+        }
         SessionInput::KeyEvent { flags, scancode } => vec![
             FastPathInputEvent::KeyboardEvent(
                 KeyboardFlags::from_bits_truncate(flags),
@@ -357,8 +364,8 @@ pub async fn rdp_disconnect(session_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn rdp_mouse_event(session_id: String, flags: u16, x: u16, y: u16) -> Result<(), String> {
-    send_input(&session_id, SessionInput::MouseEvent { flags, x, y })
+pub async fn rdp_mouse_event(session_id: String, flags: u16, x: u16, y: u16, wheel_units: i16) -> Result<(), String> {
+    send_input(&session_id, SessionInput::MouseEvent { flags, x, y, wheel_units })
 }
 
 #[tauri::command]

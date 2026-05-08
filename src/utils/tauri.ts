@@ -53,8 +53,8 @@ export const rdp = {
   disconnect: (sessionId: string) =>
     invoke("rdp_disconnect", { sessionId }),
 
-  mouseEvent: (sessionId: string, flags: number, x: number, y: number) =>
-    invoke("rdp_mouse_event", { sessionId, flags, x, y }),
+  mouseEvent: (sessionId: string, flags: number, x: number, y: number, wheelUnits: number) =>
+    invoke("rdp_mouse_event", { sessionId, flags, x, y, wheelUnits }),
 
   keyEvent: (sessionId: string, flags: number, scancode: number) =>
     invoke("rdp_key_event", { sessionId, flags, scancode }),
