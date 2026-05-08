@@ -57,6 +57,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Install Rust MSVC target for Windows
+        if: matrix.platform == 'windows-latest'
+        run: rustup target add x86_64-pc-windows-msvc
+
       - name: Install Windows build tools
         if: matrix.platform == 'windows-latest'
         uses: arduino/setup-protoc@v3
@@ -100,4 +104,4 @@ jobs:
             > **Windows**: SmartScreen may warn on first run — click "More info → Run anyway".
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.platform == 'windows-latest' && '-t x86_64-pc-windows-msvc' || matrix.args }}
+          args: ${{ matrix.args }}
