@@ -83,12 +83,8 @@ jobs:
           releaseBody: |
             ## What's New
 
-            - **Update notification toast** — on app launch, a toast appears in the bottom-right corner if a new version is available, auto-dismissing after 5 seconds
-            - **Alphabetical connection sorting** — connections are now sorted alphabetically by label instead of by creation date; groups are also sorted alphabetically
-            - **Live sorting** — connections and groups are re-sorted immediately after adding or editing, no restart needed
-            - **Settings modal stability** — modal now stays anchored at the top when switching tabs so it doesn't jump around
-            - **Monokai Light theme** — added a third light theme option alongside GitHub Light and Solarized Light
-            - **About page update** — now credits both Claude and MiniMax for AI assistance
+            - **Fixed Windows build** — resolved `RC.EXE` compilation failure by regenerating `icon.ico` with the correct format
+            - **Fixed RDP mouse wheel** — scrolling up now works correctly in Windows RDP sessions
 
             ## Downloads
 
