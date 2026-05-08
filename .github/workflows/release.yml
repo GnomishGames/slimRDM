@@ -69,9 +69,9 @@ jobs:
 
       - name: Install Visual Studio Build Tools
         if: matrix.platform == 'windows-latest'
-        uses: egor-tensin/setup-msvc@v4
+        uses: ilammy/msvc-dev-cmd@v1
         with:
-          architecture: x64
+          arch: x64
 
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v0
