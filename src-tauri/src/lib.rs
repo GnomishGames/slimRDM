@@ -38,6 +38,11 @@ pub fn run() {
             commands::rdp::rdp_mouse_event,
             commands::rdp::rdp_key_event,
             commands::rdp::rdp_resize,
+            // Clipboard
+            commands::clipboard::clipboard_get_system,
+            commands::clipboard::clipboard_set_system,
+            commands::clipboard::clipboard_get_rdp,
+            commands::clipboard::clipboard_set_rdp,
             // Credentials
             commands::credentials::save_credential,
             commands::credentials::get_credential,

@@ -48,6 +48,7 @@ ironrdp-tokio = { version = "0.8", features = ["reqwest"] }
 ironrdp-tls = { version = "0.2", features = ["rustls"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 smallvec = "1"
+arboard = "3"
 
 [features]
 default = ["ssh"]

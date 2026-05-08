@@ -101,3 +101,10 @@ export const credentials = {
   delete: (refKey: string) =>
     invoke("delete_credential", { refKey }),
 };
+
+export const clipboard = {
+  getSystem: () => invoke<string>("clipboard_get_system"),
+  setSystem: (text: string) => invoke("clipboard_set_system", { text }),
+  getRdp: (sessionId: string) => invoke<number[] | null>("clipboard_get_rdp", { sessionId }),
+  setRdp: (sessionId: string, data: number[]) => invoke("clipboard_set_rdp", { sessionId, data }),
+};

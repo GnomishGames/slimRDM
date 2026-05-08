@@ -1,9 +1,19 @@
 import { useEffect, useRef, useCallback } from "react";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { rdp, credentials } from "../utils/tauri";
+import { rdp, credentials, clipboard } from "../utils/tauri";
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { Connection, SessionStatus } from "../types";
+
+interface ClipboardFormatEvent {
+  id: number;
+  name: string | null;
+}
+
+interface ClipboardFormatDataRequestEvent {
+  sessionId: string;
+  requestedFormatId: number;
+}
 
 // RDP PointerFlags (from MS-RDPBCGR §2.2.8.1.2.2)
 const PTR_MOVE        = 0x0800;
@@ -110,6 +120,8 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
   useEffect(() => {
     let unlistenStatus: UnlistenFn | null = null;
     let unlistenFrame: UnlistenFn | null = null;
+    let unlistenClipboardCopy: UnlistenFn | null = null;
+    let unlistenClipboardRequest: UnlistenFn | null = null;
 
     const init = async () => {
       unlistenStatus = await listen<{ sessionId: string; status: string; message?: string }>(
@@ -162,6 +174,35 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
         }
       );
 
+      unlistenClipboardCopy = await listen<ClipboardFormatEvent[]>(
+        "clipboard-remote-copy",
+        async (event) => {
+          const formats = event.payload;
+          const textFormat = formats.find(f => f.id === 1 || f.id === 13);
+          if (textFormat) {
+            const data = await clipboard.getRdp(sessionId);
+            if (data) {
+              const text = new TextDecoder().decode(new Uint8Array(data));
+              await clipboard.setSystem(text);
+            }
+          }
+        }
+      );
+
+      unlistenClipboardRequest = await listen<ClipboardFormatDataRequestEvent>(
+        "clipboard-format-data-request",
+        async (event) => {
+          if (event.payload.sessionId !== sessionId) return;
+          try {
+            const text = await clipboard.getSystem();
+            const data = Array.from(new TextEncoder().encode(text));
+            await clipboard.setRdp(sessionId, data);
+          } catch (e) {
+            console.error("clipboard read failed:", e);
+          }
+        }
+      );
+
       const { username: resolvedUsername, password } = await resolveCredentials(connection);
 
       const canvas = canvasRef.current;
@@ -187,6 +228,8 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
       pendingFramesRef.current = [];
       unlistenStatus?.();
       unlistenFrame?.();
+      unlistenClipboardCopy?.();
+      unlistenClipboardRequest?.();
       rdp.disconnect(sessionId).catch(() => {});
     };
   }, [sessionId]);
@@ -237,6 +280,18 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
+
+    if (e.ctrlKey && e.code === "KeyV") {
+      e.preventDefault();
+      clipboard.getSystem().then((text) => {
+        if (text) {
+          const data = Array.from(new TextEncoder().encode(text));
+          clipboard.setRdp(sessionId, data);
+        }
+      }).catch(() => {});
+      return;
+    }
+
     e.preventDefault();
     const entry = SCANCODE[e.code];
     if (!entry) return;

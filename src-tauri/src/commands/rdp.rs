@@ -23,7 +23,7 @@ use ironrdp_cliprdr::Cliprdr;
 use ironrdp_cliprdr::pdu::ClipboardFormatId;
 use ironrdp_cliprdr::backend::CliprdrBackendFactory;
 
-use crate::commands::clipboard::{TauriCliprdrBackendFactory, TauriCliprdrBackend};
+use crate::commands::clipboard::{TauriCliprdrBackendFactory, TauriCliprdrBackend, get_clipboard_data, set_clipboard_data};
 
 enum SessionInput {
     MouseEvent { flags: u16, x: u16, y: u16 },
@@ -170,7 +170,7 @@ async fn run_rdp_session(
     let mut framed = TokioFramed::new(tcp);
     let mut connector = ClientConnector::new(config, client_addr);
 
-    let clipboard_factory = TauriCliprdrBackendFactory::new(app.clone());
+    let clipboard_factory = TauriCliprdrBackendFactory::new(app.clone(), params.session_id.clone());
     let cliprdr: Cliprdr<ironrdp_cliprdr::Client> = Cliprdr::new(clipboard_factory.build_cliprdr_backend());
     let mut connector = connector.with_static_channel(cliprdr);
 
