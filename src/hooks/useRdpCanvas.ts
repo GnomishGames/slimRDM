@@ -23,6 +23,8 @@ const PTR_RIGHT_DOWN  = 0xa000; // RIGHT_BUTTON | DOWN
 const PTR_RIGHT_UP    = 0x2000; // RIGHT_BUTTON only
 const PTR_MID_DOWN    = 0xc000; // MIDDLE | DOWN
 const PTR_MID_UP      = 0x4000; // MIDDLE only
+const PTR_WHEEL       = 0x0200; // VERTICAL_WHEEL
+const PTR_WHEEL_NEG   = 0x0100; // WHEEL_NEGATIVE
 
 // RDP KeyboardFlags
 const KEY_DOWN    = 0x00;
@@ -270,9 +272,12 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
   const onWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
     const { x, y } = canvasCoords(e);
-    const wheelUnits = Math.round(e.deltaY / 20);
-    const clampedUnits = Math.max(-255, Math.min(255, wheelUnits));
-    rdp.mouseEvent(sessionId, 0, x, y, clampedUnits).catch(() => {});
+    const rawDelta = e.deltaMode === 1
+      ? Math.abs(e.deltaY) * 40   // line mode: scale up to pixel-equivalent
+      : Math.abs(e.deltaY);        // pixel mode: use directly
+    const units = Math.max(1, Math.min(255, Math.round(rawDelta)));
+    const flags = PTR_WHEEL | (e.deltaY > 0 ? PTR_WHEEL_NEG : 0);
+    rdp.mouseEvent(sessionId, flags, x, y, units).catch(() => {});
   }, [sessionId]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {

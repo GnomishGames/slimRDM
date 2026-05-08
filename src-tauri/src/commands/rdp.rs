@@ -319,21 +319,14 @@ fn handle_input(
     input: SessionInput,
 ) -> Result<Vec<ActiveStageOutput>, ironrdp::session::SessionError> {
     let events: Vec<FastPathInputEvent> = match input {
-        SessionInput::MouseEvent { flags, x, y, wheel_units } => {
-            let final_flags = if wheel_units != 0 {
-                PointerFlags::from_bits_truncate(flags | 0x0200)
-            } else {
-                PointerFlags::from_bits_truncate(flags)
-            };
-            vec![
-                FastPathInputEvent::MouseEvent(MousePdu {
-                    flags: final_flags,
-                    number_of_wheel_rotation_units: wheel_units,
-                    x_position: x,
-                    y_position: y,
-                }),
-            ]
-        }
+        SessionInput::MouseEvent { flags, x, y, wheel_units } => vec![
+            FastPathInputEvent::MouseEvent(MousePdu {
+                flags: PointerFlags::from_bits_truncate(flags),
+                number_of_wheel_rotation_units: wheel_units,
+                x_position: x,
+                y_position: y,
+            }),
+        ],
         SessionInput::KeyEvent { flags, scancode } => vec![
             FastPathInputEvent::KeyboardEvent(
                 KeyboardFlags::from_bits_truncate(flags),
