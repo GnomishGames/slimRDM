@@ -100,4 +100,4 @@ jobs:
             > **Windows**: SmartScreen may warn on first run — click "More info → Run anyway".
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          args: ${{ matrix.platform == 'windows-latest' && '-t x86_64-pc-windows-msvc' || matrix.args }}
