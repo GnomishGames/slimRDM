@@ -19,15 +19,20 @@ use ironrdp::pdu::rdp::client_info::{PerformanceFlags, TimezoneInfo};
 use ironrdp::pdu::rdp::capability_sets::MajorPlatformType;
 use ironrdp::pdu::gcc::KeyboardType;
 use ironrdp_tokio::{self as rdp_tokio, FramedWrite, TokioFramed};
-use ironrdp_cliprdr::Cliprdr;
-use ironrdp_cliprdr::pdu::ClipboardFormatId;
+use ironrdp_cliprdr::{Cliprdr, Client};
+use ironrdp_cliprdr::pdu::{ClipboardFormat, ClipboardFormatId, FormatDataResponse};
 use ironrdp_cliprdr::backend::CliprdrBackendFactory;
 
-use crate::commands::clipboard::{TauriCliprdrBackendFactory, TauriCliprdrBackend, get_clipboard_data, set_clipboard_data};
+use crate::commands::clipboard::{
+    TauriCliprdrBackendFactory, get_clipboard_data,
+    take_format_list_pending, set_format_list_pending, get_pending_clipboard_request,
+    take_initiate_paste, set_requested_format, CF_TEXT, CF_UNICODETEXT,
+};
 
 enum SessionInput {
     MouseEvent { flags: u16, x: u16, y: u16, wheel_units: i16 },
     KeyEvent { flags: u8, scancode: u8 },
+    UnicodeText(Vec<u16>),
     Resize { width: u16, height: u16 },
     Disconnect,
 }
@@ -275,6 +280,71 @@ async fn run_rdp_session(
             }
         }
 
+        // Send clipboard format list when the channel requests it (Monitor Ready flow)
+        if take_format_list_pending() {
+            let formats = vec![
+                ClipboardFormat::new(ClipboardFormatId(CF_TEXT)),
+                ClipboardFormat::new(ClipboardFormatId(CF_UNICODETEXT)),
+            ];
+            let messages = active_stage
+                .get_svc_processor_mut::<Cliprdr<Client>>()
+                .and_then(|cliprdr| cliprdr.initiate_copy(&formats).ok());
+            if let Some(messages) = messages {
+                if let Ok(bytes) = active_stage.process_svc_processor_messages(messages) {
+                    writer.write_all(&bytes).await.map_err(|e| format!("Write error: {e}"))?;
+                }
+            }
+        }
+
+        // Respond to server's clipboard format data request
+        if let Some((_sid, format_id)) = get_pending_clipboard_request() {
+            let data = get_clipboard_data(&session_id);
+            let response = match data {
+                Some(bytes) => {
+                    let encoded = if format_id == CF_UNICODETEXT {
+                        let text = String::from_utf8_lossy(&bytes);
+                        let mut utf16: Vec<u8> = text.encode_utf16()
+                            .flat_map(|c| c.to_le_bytes())
+                            .collect();
+                        utf16.extend_from_slice(&[0, 0]);
+                        utf16
+                    } else {
+                        let mut b = bytes;
+                        b.push(0);
+                        b
+                    };
+                    FormatDataResponse::new_data(encoded)
+                }
+                None => FormatDataResponse::new_error(),
+            };
+            let messages = active_stage
+                .get_svc_processor_mut::<Cliprdr<Client>>()
+                .and_then(|cliprdr| cliprdr.submit_format_data(response).ok());
+            if let Some(messages) = messages {
+                if let Ok(bytes) = active_stage.process_svc_processor_messages(messages) {
+                    writer.write_all(&bytes).await.map_err(|e| format!("Write error: {e}"))?;
+                }
+                // Re-announce format list so the server keeps requesting fresh data
+                // on each subsequent paste instead of using its local cached copy.
+                set_format_list_pending();
+            }
+        }
+
+        // Request clipboard data from server after remote copy
+        if let Some((sid, format_id)) = take_initiate_paste() {
+            if sid == session_id {
+                set_requested_format(format_id);
+                let messages = active_stage
+                    .get_svc_processor_mut::<Cliprdr<Client>>()
+                    .and_then(|cliprdr| cliprdr.initiate_paste(ClipboardFormatId(format_id)).ok());
+                if let Some(messages) = messages {
+                    if let Ok(bytes) = active_stage.process_svc_processor_messages(messages) {
+                        writer.write_all(&bytes).await.map_err(|e| format!("Write error: {e}"))?;
+                    }
+                }
+            }
+        }
+
         // Emit the accumulated dirty union once per frame budget
         if let Some((left, top, right, bottom)) = pending_dirty {
             if last_frame.elapsed() >= frame_budget {
@@ -333,6 +403,14 @@ fn handle_input(
                 scancode,
             ),
         ],
+        SessionInput::UnicodeText(chars) => {
+            let mut events = Vec::with_capacity(chars.len() * 2);
+            for ch in chars {
+                events.push(FastPathInputEvent::UnicodeKeyboardEvent(KeyboardFlags::empty(), ch));
+                events.push(FastPathInputEvent::UnicodeKeyboardEvent(KeyboardFlags::RELEASE, ch));
+            }
+            events
+        }
         SessionInput::Resize { .. } | SessionInput::Disconnect => return Ok(vec![]),
     };
 
@@ -364,6 +442,12 @@ pub async fn rdp_mouse_event(session_id: String, flags: u16, x: u16, y: u16, whe
 #[tauri::command]
 pub async fn rdp_key_event(session_id: String, flags: u8, scancode: u8) -> Result<(), String> {
     send_input(&session_id, SessionInput::KeyEvent { flags, scancode })
+}
+
+#[tauri::command]
+pub async fn rdp_type_text(session_id: String, text: String) -> Result<(), String> {
+    let chars: Vec<u16> = text.encode_utf16().collect();
+    send_input(&session_id, SessionInput::UnicodeText(chars))
 }
 
 #[tauri::command]

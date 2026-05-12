@@ -59,6 +59,9 @@ export const rdp = {
   keyEvent: (sessionId: string, flags: number, scancode: number) =>
     invoke("rdp_key_event", { sessionId, flags, scancode }),
 
+  typeText: (sessionId: string, text: string) =>
+    invoke("rdp_type_text", { sessionId, text }),
+
   resize: (sessionId: string, width: number, height: number) =>
     invoke("rdp_resize", { sessionId, width, height }),
 };

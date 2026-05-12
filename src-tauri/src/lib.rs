@@ -37,6 +37,7 @@ pub fn run() {
             commands::rdp::rdp_disconnect,
             commands::rdp::rdp_mouse_event,
             commands::rdp::rdp_key_event,
+            commands::rdp::rdp_type_text,
             commands::rdp::rdp_resize,
             // Clipboard
             commands::clipboard::clipboard_get_system,
