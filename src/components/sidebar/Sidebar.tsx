@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, ChevronUp, Folder, FolderPlus, Settings, LockKeyhole, Key, Cpu } from "lucide-react";
+import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, ChevronUp, ChevronsUp, ChevronsDown, Folder, FolderPlus, Settings, LockKeyhole, Key, Cpu } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { Connection, Group } from "../../types";
 import { AddConnectionModal } from "../modals/AddConnectionModal";
@@ -8,7 +8,7 @@ import { SettingsModal } from "../modals/SettingsModal";
 import { credentials } from "../../utils/tauri";
 import clsx from "clsx";
 
-export function Sidebar() {
+export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
   const {
     connections, groups, searchQuery,
     setSearchQuery, openSession, deleteConnection,
@@ -16,7 +16,6 @@ export function Sidebar() {
   } = useAppStore();
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [addingGroup, setAddingGroup] = useState(false);
@@ -34,6 +33,11 @@ export function Sidebar() {
       return next;
     });
   };
+
+  const allCollapsed = groups.length > 0 && expandedGroups.size === 0;
+
+  const handleCollapseAll = () => setExpandedGroups(new Set());
+  const handleExpandAll = () => setExpandedGroups(new Set(groups.map((g) => g.id)));
 
   const handleAddGroup = async () => {
     const name = newGroupName.trim();
@@ -68,17 +72,25 @@ export function Sidebar() {
 
   return (
     <>
-      {showAddModal && <AddConnectionModal onClose={() => setShowAddModal(false)} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {editingGroup && <EditGroupModal group={editingGroup} onClose={() => setEditingGroup(null)} />}
       <aside className="sidebar">
         <div className="sidebar-header">
           <span className="app-title">SlimRDM</span>
           <div className="sidebar-header-actions">
+            {groups.length > 0 && (
+              <button
+                className="icon-btn"
+                onClick={allCollapsed ? handleExpandAll : handleCollapseAll}
+                title={allCollapsed ? "Expand All" : "Collapse All"}
+              >
+                {allCollapsed ? <ChevronsDown size={15} /> : <ChevronsUp size={15} />}
+              </button>
+            )}
             <button className="icon-btn" onClick={() => setAddingGroup(true)} title="New Group">
               <FolderPlus size={15} />
             </button>
-            <button className="icon-btn" onClick={() => setShowAddModal(true)} title="New Connection">
+            <button className="icon-btn" onClick={onOpenAddModal} title="New Connection">
               <Plus size={16} />
             </button>
           </div>
@@ -216,6 +228,7 @@ function ConnectionItem({
   const session = useAppStore((s) => s.sessions.find((sess) => sess.connectionId === conn.id));
   const addConnection = useAppStore((s) => s.addConnection);
   const closeSession = useAppStore((s) => s.closeSession);
+  const setActiveSession = useAppStore((s) => s.setActiveSession);
   const connStatus = session?.status ?? "idle";
 
   const handleDuplicate = async () => {
@@ -239,7 +252,11 @@ function ConnectionItem({
         onBlur={() => setShowMenu(false)}
         tabIndex={0}
       >
-        <button className="connection-btn" onDoubleClick={() => onOpen(conn)}>
+        <button
+          className="connection-btn"
+          onClick={session ? () => setActiveSession(session.id) : undefined}
+          onDoubleClick={() => onOpen(conn)}
+        >
           <span className={clsx("conn-icon", isRdp ? "conn-icon--rdp" : "conn-icon--ssh", `conn-icon--${connStatus}`)}>
             {isRdp ? <Monitor size={13} /> : <Terminal size={13} />}
           </span>

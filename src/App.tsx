@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { SessionTabs } from "./components/session/SessionTabs";
 import { SessionPanel } from "./components/session/SessionPanel";
+import { AddConnectionModal } from "./components/modals/AddConnectionModal";
 import { useAppStore } from "./store/appStore";
 import { useSettingsStore } from "./store/settingsStore";
 import { updates, UpdateInfo } from "./utils/tauri";
@@ -12,6 +13,7 @@ export default function App() {
   const { loadConnections, loadGroups, sessions, activeSessionId, setSearchQuery } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
     loadConnections();
@@ -25,14 +27,18 @@ export default function App() {
     }).catch(() => {});
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const target = e.target as HTMLElement;
-        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "CANVAS") return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "CANVAS") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === "/") {
         e.preventDefault();
         setSearchQuery("");
         setTimeout(() => {
           document.querySelector<HTMLInputElement>(".search-input")?.focus();
         }, 0);
+      } else if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        setShowAddModal(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -41,6 +47,7 @@ export default function App() {
 
   return (
     <>
+      {showAddModal && <AddConnectionModal onClose={() => setShowAddModal(false)} />}
       {updateInfo && (
         <div className="update-toast">
           <span>v{updateInfo.latestVersion} available</span>
@@ -52,7 +59,7 @@ export default function App() {
         </div>
       )}
       <div className="app-root">
-        <Sidebar />
+        <Sidebar onOpenAddModal={() => setShowAddModal(true)} />
         <div className="main-area">
           {sessions.length > 0 ? (
             <>

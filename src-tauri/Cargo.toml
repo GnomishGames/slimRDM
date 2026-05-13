@@ -1,6 +1,6 @@
 [package]
 name = "slimrdm"
-version = "1.0.2"
+version = "1.0.3"
 description = "SlimRDM - Lightweight RDP & SSH Client"
 authors = ["SlimRDM"]
 license = "MIT"
