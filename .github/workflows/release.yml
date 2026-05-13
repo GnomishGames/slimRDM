@@ -83,8 +83,10 @@ jobs:
           releaseBody: |
             ## What's New
 
-            - **New app icon** — slate blue theme with electric blue `[S]` branding
-            - **Search shortcut** — press `/` to focus the search box from anywhere
+            - **N shortcut** — press `N` from anywhere to open the New Connection dialog
+            - **Collapse / Expand All** — new button in the sidebar header to collapse or expand all folder groups at once
+            - **Click to focus tab** — single-clicking a connection that's already open switches to its tab
+            - Reordered sidebar header buttons: expand/collapse → new folder → new connection
 
             ## Downloads
 
