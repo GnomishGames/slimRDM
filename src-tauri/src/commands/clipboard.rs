@@ -26,12 +26,6 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct ClipboardFormatEvent {
-    pub id: u32,
-    pub name: Option<String>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClipboardFormatDataRequestEvent {
     pub session_id: String,

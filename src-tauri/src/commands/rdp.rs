@@ -173,7 +173,7 @@ async fn run_rdp_session(
     };
 
     let mut framed = TokioFramed::new(tcp);
-    let mut connector = ClientConnector::new(config, client_addr);
+    let connector = ClientConnector::new(config, client_addr);
 
     let clipboard_factory = TauriCliprdrBackendFactory::new(app.clone(), params.session_id.clone());
     let cliprdr: Cliprdr<ironrdp_cliprdr::Client> = Cliprdr::new(clipboard_factory.build_cliprdr_backend());
