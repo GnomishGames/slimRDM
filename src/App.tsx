@@ -9,7 +9,7 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import "./styles.css";
 
 export default function App() {
-  const { loadConnections, loadGroups, sessions, activeSessionId } = useAppStore();
+  const { loadConnections, loadGroups, sessions, activeSessionId, setSearchQuery } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
 
@@ -23,6 +23,20 @@ export default function App() {
         setTimeout(() => setUpdateInfo(null), 5000);
       }
     }).catch(() => {});
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+        e.preventDefault();
+        setSearchQuery("");
+        setTimeout(() => {
+          document.querySelector<HTMLInputElement>(".search-input")?.focus();
+        }, 0);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   return (
