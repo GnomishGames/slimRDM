@@ -83,8 +83,8 @@ jobs:
           releaseBody: |
             ## What's New
 
-            - **Fixed Windows build** — resolved `RC.EXE` compilation failure by regenerating `icon.ico` with the correct format
-            - **Fixed RDP mouse wheel** — scrolling up now works correctly in Windows RDP sessions
+            - **New app icon** — slate blue theme with electric blue `[S]` branding
+            - **Search shortcut** — press `/` to focus the search box from anywhere
 
             ## Downloads
 
