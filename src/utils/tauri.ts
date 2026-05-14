@@ -92,6 +92,7 @@ export interface UpdateInfo {
 
 export const updates = {
   check: () => invoke<UpdateInfo>("check_for_updates"),
+  install: (url: string) => invoke<void>("download_and_install_update", { url }),
 };
 
 export const credentials = {

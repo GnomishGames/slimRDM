@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { SessionTabs } from "./components/session/SessionTabs";
 import { SessionPanel } from "./components/session/SessionPanel";
@@ -13,6 +13,8 @@ export default function App() {
   const { loadConnections, loadGroups, sessions, activeSessionId, setSearchQuery } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateDownloading, setUpdateDownloading] = useState(false);
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
@@ -22,7 +24,7 @@ export default function App() {
     updates.check().then((info) => {
       if (info.hasUpdate) {
         setUpdateInfo(info);
-        setTimeout(() => setUpdateInfo(null), 5000);
+        dismissTimerRef.current = setTimeout(() => setUpdateInfo(null), 5000);
       }
     }).catch(() => {});
 
@@ -51,11 +53,27 @@ export default function App() {
       {updateInfo && (
         <div className="update-toast">
           <span>v{updateInfo.latestVersion} available</span>
-          <button
-            onClick={() => updateInfo.downloadUrl ? openUrl(updateInfo.downloadUrl) : openUrl("https://github.com/GnomishGames/slimRDM/releases")}
-          >
-            {updateInfo.downloadUrl ? "Download" : "View Release"}
-          </button>
+          {updateDownloading ? (
+            <span className="update-toast-status">Downloading…</span>
+          ) : (
+            <button
+              onClick={async () => {
+                if (!updateInfo.downloadUrl) {
+                  openUrl("https://github.com/GnomishGames/slimRDM/releases");
+                  return;
+                }
+                if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+                setUpdateDownloading(true);
+                try {
+                  await updates.install(updateInfo.downloadUrl);
+                } catch { /* installer launched or failed; dismiss either way */ }
+                setUpdateInfo(null);
+                setUpdateDownloading(false);
+              }}
+            >
+              {updateInfo.downloadUrl ? "Install" : "View Release"}
+            </button>
+          )}
         </div>
       )}
       <div className="app-root">

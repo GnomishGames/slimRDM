@@ -478,7 +478,7 @@ function DataSection() {
   );
 }
 
-type UpdateState = "idle" | "checking" | "up-to-date" | "available" | "error";
+type UpdateState = "idle" | "checking" | "up-to-date" | "available" | "downloading" | "error";
 
 function AboutSection() {
   const [version, setVersion] = useState<string>("…");
@@ -524,6 +524,9 @@ function AboutSection() {
         {updateState === "checking" && (
           <span className="about-update-status">Checking…</span>
         )}
+        {updateState === "downloading" && (
+          <span className="about-update-status">Downloading…</span>
+        )}
         {updateState === "up-to-date" && (
           <span className="about-update-status about-update-status--ok">You're up to date</span>
         )}
@@ -536,9 +539,18 @@ function AboutSection() {
             {updateInfo.downloadUrl ? (
               <button
                 className="btn btn--primary about-update-btn"
-                onClick={() => openUrl(updateInfo.downloadUrl!)}
+                onClick={async () => {
+                  setUpdateState("downloading");
+                  try {
+                    await updates.install(updateInfo.downloadUrl!);
+                    setUpdateState("up-to-date");
+                  } catch (err) {
+                    setUpdateError(String(err));
+                    setUpdateState("error");
+                  }
+                }}
               >
-                <Download size={13} /> Download
+                <Download size={13} /> Install
               </button>
             ) : (
               <button className="btn btn--primary about-update-btn" onClick={openGitHub}>
