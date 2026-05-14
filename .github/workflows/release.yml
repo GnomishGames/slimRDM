@@ -14,9 +14,9 @@ jobs:
       matrix:
         include:
           - platform: ubuntu-22.04
-            args: ''
+            args: '--bundles deb,appimage'
           - platform: macos-latest
-            args: '--target universal-apple-darwin'
+            args: '--target universal-apple-darwin --bundles dmg'
           - platform: windows-latest
             args: ''
 
@@ -95,7 +95,6 @@ jobs:
             | Linux | `.deb` | Debian / Ubuntu |
             | Linux | `.AppImage` | Universal (any distro) |
             | macOS | `.dmg` | Universal — Intel + Apple Silicon |
-            | Windows | `.msi` | Windows installer |
             | Windows | `.exe` | NSIS installer |
 
             > **macOS**: builds are unsigned. Right-click → Open on first launch to bypass Gatekeeper.
