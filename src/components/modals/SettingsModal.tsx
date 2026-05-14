@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Palette, Server, Monitor, Sliders, Database, Info, Github, ExternalLink, Upload, Download } from "lucide-react";
+import { X, Palette, Server, Monitor, Sliders, Database, Info, Github, ExternalLink, Upload, Download, Bug } from "lucide-react";
+import { ReportIssueModal } from "./ReportIssueModal";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useSettingsStore } from "../../store/settingsStore";
@@ -484,6 +485,7 @@ function AboutSection() {
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [showReportIssue, setShowReportIssue] = useState(false);
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion("unknown"));
@@ -555,6 +557,14 @@ function AboutSection() {
         GnomishGames/slimRDM
         <ExternalLink size={12} className="about-external-icon" />
       </button>
+
+      <button className="about-github-btn" onClick={() => setShowReportIssue(true)}>
+        <Bug size={14} />
+        Report an Issue
+        <ExternalLink size={12} className="about-external-icon" />
+      </button>
+
+      {showReportIssue && <ReportIssueModal onClose={() => setShowReportIssue(false)} />}
 
       <div className="about-block">
         <p className="about-block-title">Built with AI assistance</p>

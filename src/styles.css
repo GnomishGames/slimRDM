@@ -1337,3 +1337,39 @@ kbd {
   padding: 3px 10px;
   font-size: 11px;
 }
+
+/* Report Issue Modal */
+.issue-type-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.issue-type-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.issue-type-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.issue-type-btn--active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.field-required {
+  color: var(--red);
+}
