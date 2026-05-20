@@ -57,8 +57,14 @@ fn pick_asset_url(assets: &[GithubAsset]) -> Option<String> {
     None
 }
 
+const RELEASE_URL_PREFIX: &str = "https://github.com/GnomishGames/slimRDM/releases/download/";
+
 #[tauri::command]
 pub async fn download_and_install_update(url: String) -> Result<(), String> {
+    if !url.starts_with(RELEASE_URL_PREFIX) {
+        return Err("Invalid update URL: must be a slimRDM GitHub release asset".into());
+    }
+
     let client = reqwest::Client::builder()
         .user_agent(concat!("slimrdm/", env!("CARGO_PKG_VERSION")))
         .build()

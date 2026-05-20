@@ -8,7 +8,7 @@ export const ssh = {
     port: number;
     username: string;
     authType: string;
-    password?: string;
+    credentialRef?: string;
     privateKeyPath?: string;
     privateKeyPassphrase?: string;
     keepaliveInterval?: number;
@@ -20,7 +20,7 @@ export const ssh = {
       port: number;
       username: string;
       authType: string;
-      password?: string;
+      credentialRef?: string;
       privateKeyPath?: string;
       privateKeyPassphrase?: string;
     };
@@ -42,7 +42,7 @@ export const rdp = {
     host: string;
     port: number;
     username: string;
-    password?: string;
+    credentialRef?: string;
     domain?: string;
     width?: number;
     height?: number;
@@ -62,7 +62,7 @@ export const rdp = {
       port: number;
       username: string;
       authType: string;
-      password?: string;
+      credentialRef?: string;
       privateKeyPath?: string;
       privateKeyPassphrase?: string;
     };

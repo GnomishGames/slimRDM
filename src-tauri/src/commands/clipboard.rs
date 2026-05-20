@@ -19,10 +19,10 @@ pub const CF_UNICODETEXT: u32 = 13;
 
 lazy_static::lazy_static! {
     static ref RDP_CLIPBOARD_DATA: Mutex<HashMap<String, Vec<u8>>> = Mutex::new(HashMap::new());
-    static ref RDP_CLIPBOARD_PENDING: Mutex<Option<(String, u32)>> = Mutex::new(None);
-    static ref RDP_FORMAT_LIST_PENDING: Mutex<bool> = Mutex::new(false);
-    static ref RDP_INITIATE_PASTE: Mutex<Option<(String, u32)>> = Mutex::new(None);
-    static ref RDP_REQUESTED_FORMAT: Mutex<Option<u32>> = Mutex::new(None);
+    static ref RDP_CLIPBOARD_PENDING: Mutex<HashMap<String, u32>> = Mutex::new(HashMap::new());
+    static ref RDP_FORMAT_LIST_PENDING: Mutex<HashMap<String, bool>> = Mutex::new(HashMap::new());
+    static ref RDP_INITIATE_PASTE: Mutex<HashMap<String, u32>> = Mutex::new(HashMap::new());
+    static ref RDP_REQUESTED_FORMAT: Mutex<HashMap<String, u32>> = Mutex::new(HashMap::new());
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -54,27 +54,25 @@ pub fn clipboard_set_rdp(session_id: String, data: Vec<u8>) {
     set_clipboard_data(&session_id, data);
 }
 
-pub fn get_pending_clipboard_request() -> Option<(String, u32)> {
-    RDP_CLIPBOARD_PENDING.lock().unwrap().take()
+pub fn get_pending_clipboard_request(session_id: &str) -> Option<u32> {
+    RDP_CLIPBOARD_PENDING.lock().unwrap().remove(session_id)
 }
 
-pub fn take_format_list_pending() -> bool {
-    let mut flag = RDP_FORMAT_LIST_PENDING.lock().unwrap();
-    let val = *flag;
-    *flag = false;
-    val
+pub fn take_format_list_pending(session_id: &str) -> bool {
+    let mut map = RDP_FORMAT_LIST_PENDING.lock().unwrap();
+    map.remove(session_id).unwrap_or(false)
 }
 
-pub fn set_format_list_pending() {
-    *RDP_FORMAT_LIST_PENDING.lock().unwrap() = true;
+pub fn set_format_list_pending(session_id: &str) {
+    RDP_FORMAT_LIST_PENDING.lock().unwrap().insert(session_id.to_string(), true);
 }
 
-pub fn take_initiate_paste() -> Option<(String, u32)> {
-    RDP_INITIATE_PASTE.lock().unwrap().take()
+pub fn take_initiate_paste(session_id: &str) -> Option<u32> {
+    RDP_INITIATE_PASTE.lock().unwrap().remove(session_id)
 }
 
-pub fn set_requested_format(format_id: u32) {
-    *RDP_REQUESTED_FORMAT.lock().unwrap() = Some(format_id);
+pub fn set_requested_format(session_id: &str, format_id: u32) {
+    RDP_REQUESTED_FORMAT.lock().unwrap().insert(session_id.to_string(), format_id);
 }
 
 pub fn set_clipboard_data(session_id: &str, data: Vec<u8>) {
@@ -133,7 +131,7 @@ impl CliprdrBackend for TauriCliprdrBackend {
     }
 
     fn on_request_format_list(&mut self) {
-        *RDP_FORMAT_LIST_PENDING.lock().unwrap() = true;
+        set_format_list_pending(&self.session_id);
     }
 
     fn on_process_negotiated_capabilities(&mut self, _capabilities: ClipboardGeneralCapabilityFlags) {}
@@ -147,7 +145,7 @@ impl CliprdrBackend for TauriCliprdrBackend {
             .or_else(|| available_formats.iter().find(|f| f.id.0 == CF_TEXT));
 
         if let Some(fmt) = preferred {
-            *RDP_INITIATE_PASTE.lock().unwrap() = Some((self.session_id.clone(), fmt.id.0));
+            RDP_INITIATE_PASTE.lock().unwrap().insert(self.session_id.clone(), fmt.id.0);
         }
     }
 
@@ -159,7 +157,7 @@ impl CliprdrBackend for TauriCliprdrBackend {
                 }
             }
         }
-        *RDP_CLIPBOARD_PENDING.lock().unwrap() = Some((self.session_id.clone(), request.format.0));
+        RDP_CLIPBOARD_PENDING.lock().unwrap().insert(self.session_id.clone(), request.format.0);
         let _ = self.app.emit(
             "clipboard-format-data-request",
             ClipboardFormatDataRequestEvent {
@@ -172,7 +170,7 @@ impl CliprdrBackend for TauriCliprdrBackend {
     fn on_format_data_response(&mut self, response: FormatDataResponse<'_>) {
         if response.is_error() { return; }
         let data = response.data();
-        let format = RDP_REQUESTED_FORMAT.lock().unwrap().take().unwrap_or(CF_UNICODETEXT);
+        let format = RDP_REQUESTED_FORMAT.lock().unwrap().remove(&self.session_id).unwrap_or(CF_UNICODETEXT);
         let text = if format == CF_UNICODETEXT {
             let utf16: Vec<u16> = data.chunks_exact(2)
                 .map(|c| u16::from_le_bytes([c[0], c[1]]))

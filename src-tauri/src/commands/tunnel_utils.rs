@@ -1,6 +1,10 @@
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
+use sha2::{Digest, Sha256};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
+
 use crate::store::AuthType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -10,7 +14,7 @@ pub struct JumpHostParams {
     pub port: u16,
     pub username: String,
     pub auth_type: AuthType,
-    pub password: Option<String>,
+    pub credential_ref: Option<String>,
     pub private_key_path: Option<String>,
     pub private_key_passphrase: Option<String>,
 }
@@ -28,16 +32,19 @@ pub async fn open_jump_channel(
     use async_trait::async_trait;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    struct NoopHandler;
+    struct JumpHostHandler {
+        host: String,
+    }
 
     #[async_trait]
-    impl client::Handler for NoopHandler {
+    impl client::Handler for JumpHostHandler {
         type Error = russh::Error;
         async fn check_server_key(
             &mut self,
-            _server_public_key: &key::PublicKey,
+            server_public_key: &key::PublicKey,
         ) -> Result<bool, Self::Error> {
-            Ok(true)
+            let fp = BASE64.encode(Sha256::digest(format!("{server_public_key:?}").as_bytes()));
+            Ok(crate::commands::known_hosts::check_or_store(&self.host, &fp).unwrap_or(false))
         }
     }
 
@@ -45,16 +52,18 @@ pub async fn open_jump_channel(
     let mut session = client::connect(
         config,
         format!("{}:{}", params.host, params.port),
-        NoopHandler,
+        JumpHostHandler { host: params.host.clone() },
     )
     .await
     .map_err(|e| format!("Jump host connect failed: {e}"))?;
 
     let authenticated = match &params.auth_type {
         AuthType::Password => {
-            let pw = params.password.as_deref().unwrap_or("");
+            let pw = params.credential_ref.as_deref()
+                .and_then(crate::commands::credentials::get_credential_sync)
+                .unwrap_or_default();
             session
-                .authenticate_password(&params.username, pw)
+                .authenticate_password(&params.username, &pw)
                 .await
                 .map_err(|e| format!("Jump host auth failed: {e}"))?
         }

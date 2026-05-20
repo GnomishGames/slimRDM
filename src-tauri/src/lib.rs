@@ -2,6 +2,8 @@ mod commands;
 mod store;
 mod error;
 
+use tauri::Manager;
+
 
 pub fn run() {
     tauri::Builder::default()
@@ -11,8 +13,10 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
-            // Initialize the credential store
             store::init(app.handle())?;
+            if let Ok(data_dir) = app.path().app_data_dir() {
+                commands::known_hosts::init(data_dir);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

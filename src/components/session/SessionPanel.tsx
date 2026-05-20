@@ -2,7 +2,6 @@ import { useRef, useEffect } from "react";
 import { Session } from "../../types";
 import { useSshTerminal } from "../../hooks/useSshTerminal";
 import { useRdpCanvas } from "../../hooks/useRdpCanvas";
-import { credentials } from "../../utils/tauri";
 import clsx from "clsx";
 
 interface Props {
@@ -32,17 +31,7 @@ function SshPanel({ session, active }: Props) {
 
   useEffect(() => {
     if (!active) return;
-    const init = async () => {
-      let password: string | undefined;
-      if (session.connection.authType === "password" && session.connection.credentialRef) {
-        password = await credentials.get(session.connection.credentialRef).catch((e) => {
-          console.error("credential fetch failed:", e);
-          return undefined;
-        });
-      }
-      await connect(password);
-    };
-    init().catch(console.error);
+    connect().catch(console.error);
   }, []);
 
   useEffect(() => {

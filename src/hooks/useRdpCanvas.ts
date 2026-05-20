@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { rdp, credentials, clipboard } from "../utils/tauri";
+import { rdp, clipboard } from "../utils/tauri";
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { Connection, SessionStatus } from "../types";
@@ -74,37 +74,31 @@ type JumpHostParams = {
   port: number;
   username: string;
   authType: string;
-  password?: string;
+  credentialRef?: string;
   privateKeyPath?: string;
 };
 
-async function resolveCredentials(conn: Connection): Promise<{ username: string; password?: string }> {
+function resolveCredentials(conn: Connection): { username: string; credentialRef?: string } {
   if (conn.useGroupCredentials && conn.groupId) {
     const group = useAppStore.getState().groups.find((g) => g.id === conn.groupId);
     if (group?.username) {
-      const password = group.credentialRef
-        ? await credentials.get(group.credentialRef).catch(() => undefined)
-        : undefined;
-      return { username: group.username, password };
+      return { username: group.username, credentialRef: group.credentialRef };
     }
   }
-  const password = conn.credentialRef
-    ? await credentials.get(conn.credentialRef).catch(() => undefined)
-    : undefined;
-  return { username: conn.username, password };
+  return { username: conn.username, credentialRef: conn.credentialRef };
 }
 
-async function resolveJumpHostParams(conn: Connection): Promise<JumpHostParams | undefined> {
+function resolveJumpHostParams(conn: Connection): JumpHostParams | undefined {
   if (!conn.jumpHostId) return undefined;
   const jumpConn = useAppStore.getState().connections.find((c) => c.id === conn.jumpHostId);
   if (!jumpConn || jumpConn.connectionType !== "ssh") return undefined;
-  const creds = await resolveCredentials(jumpConn);
+  const creds = resolveCredentials(jumpConn);
   return {
     host: jumpConn.host,
     port: jumpConn.port,
     username: creds.username,
     authType: jumpConn.authType,
-    password: creds.password,
+    credentialRef: creds.credentialRef,
   };
 }
 
@@ -193,8 +187,8 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
         }
       );
 
-      const { username: resolvedUsername, password } = await resolveCredentials(connection);
-      const jumpHostParams = await resolveJumpHostParams(connection);
+      const { username: resolvedUsername, credentialRef } = resolveCredentials(connection);
+      const jumpHostParams = resolveJumpHostParams(connection);
 
       const wrapper = canvasRef.current?.parentElement;
       await rdp.connect({
@@ -202,7 +196,7 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
         host: connection.host,
         port: connection.port,
         username: resolvedUsername,
-        password,
+        credentialRef,
         width: wrapper?.clientWidth ?? rdpDefaults.width,
         height: wrapper?.clientHeight ?? rdpDefaults.height,
         performanceFlags: rdpDefaults.performanceFlags,

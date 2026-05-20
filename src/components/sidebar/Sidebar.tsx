@@ -275,7 +275,11 @@ function ConnectionItem({
             {session && <button onClick={handleReconnect}>Reconnect</button>}
             <button onClick={() => { setEditing(true); setShowMenu(false); }}>Edit</button>
             <button onClick={handleDuplicate}>Duplicate</button>
-            <button onClick={() => { onDelete(conn.id); setShowMenu(false); }} className="danger">Delete</button>
+            <button onClick={async () => {
+              if (conn.credentialRef) await credentials.delete(conn.credentialRef).catch(() => {});
+              onDelete(conn.id);
+              setShowMenu(false);
+            }} className="danger">Delete</button>
           </div>
         )}
       </div>

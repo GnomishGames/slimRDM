@@ -4,6 +4,10 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
 use serde::{Deserialize, Serialize};
 
+use sha2::{Digest, Sha256};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
+
 use crate::store::AuthType;
 use crate::commands::tunnel_utils::{JumpHostParams, open_jump_channel};
 
@@ -29,7 +33,7 @@ pub struct SshConnectParams {
     pub port: u16,
     pub username: String,
     pub auth_type: AuthType,
-    pub password: Option<String>,
+    pub credential_ref: Option<String>,
     pub private_key_path: Option<String>,
     pub private_key_passphrase: Option<String>,
     pub keepalive_interval: Option<u32>, // seconds; None = disabled
@@ -127,6 +131,7 @@ async fn run_ssh_session(
     let (close_tx, mut close_rx) = mpsc::unbounded_channel::<()>();
 
     struct ClientHandler {
+        host: String,
         session_id: String,
         app: AppHandle,
         close_tx: mpsc::UnboundedSender<()>,
@@ -138,9 +143,20 @@ async fn run_ssh_session(
 
         async fn check_server_key(
             &mut self,
-            _server_public_key: &key::PublicKey,
+            server_public_key: &key::PublicKey,
         ) -> std::result::Result<bool, Self::Error> {
-            Ok(true)
+            let fp = BASE64.encode(Sha256::digest(format!("{server_public_key:?}").as_bytes()));
+            match crate::commands::known_hosts::check_or_store(&self.host, &fp) {
+                Ok(trusted) => Ok(trusted),
+                Err(msg) => {
+                    let _ = self.app.emit("ssh-status", SshStatusEvent {
+                        session_id: self.session_id.clone(),
+                        status: "error".into(),
+                        message: Some(msg),
+                    });
+                    Ok(false)
+                }
+            }
         }
 
         async fn data(
@@ -168,6 +184,7 @@ async fn run_ssh_session(
     }
 
     let handler = ClientHandler {
+        host: params.host.clone(),
         session_id: session_id.clone(),
         app: app_emit,
         close_tx,
@@ -210,8 +227,10 @@ async fn run_ssh_session(
     // Authenticate
     let authenticated = match &params.auth_type {
         AuthType::Password => {
-            let pw = params.password.as_deref().unwrap_or("");
-            session.authenticate_password(&params.username, pw)
+            let pw = params.credential_ref.as_deref()
+                .and_then(crate::commands::credentials::get_credential_sync)
+                .unwrap_or_default();
+            session.authenticate_password(&params.username, &pw)
                 .await
                 .map_err(|e| format!("Auth failed: {}", e))?
         }

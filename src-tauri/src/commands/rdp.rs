@@ -51,7 +51,7 @@ pub struct RdpConnectParams {
     pub host: String,
     pub port: u16,
     pub username: String,
-    pub password: Option<String>,
+    pub credential_ref: Option<String>,
     pub domain: Option<String>,
     pub width: Option<u32>,
     pub height: Option<u32>,
@@ -155,10 +155,13 @@ where
     let width = params.width.unwrap_or(1280) as u16;
     let height = params.height.unwrap_or(800) as u16;
 
+    let password = params.credential_ref.as_deref()
+        .and_then(crate::commands::credentials::get_credential_sync)
+        .unwrap_or_default();
     let config = Config {
         credentials: Credentials::UsernamePassword {
             username: params.username.clone(),
-            password: params.password.clone().unwrap_or_default(),
+            password,
         },
         domain: params.domain.clone(),
         enable_tls: true,
@@ -305,7 +308,7 @@ where
         }
 
         // Send clipboard format list when the channel requests it (Monitor Ready flow)
-        if take_format_list_pending() {
+        if take_format_list_pending(&session_id) {
             let formats = vec![
                 ClipboardFormat::new(ClipboardFormatId(CF_TEXT)),
                 ClipboardFormat::new(ClipboardFormatId(CF_UNICODETEXT)),
@@ -321,7 +324,7 @@ where
         }
 
         // Respond to server's clipboard format data request
-        if let Some((_sid, format_id)) = get_pending_clipboard_request() {
+        if let Some(format_id) = get_pending_clipboard_request(&session_id) {
             let data = get_clipboard_data(&session_id);
             let response = match data {
                 Some(bytes) => {
@@ -350,14 +353,14 @@ where
                 }
                 // Re-announce format list so the server keeps requesting fresh data
                 // on each subsequent paste instead of using its local cached copy.
-                set_format_list_pending();
+                set_format_list_pending(&session_id);
             }
         }
 
         // Request clipboard data from server after remote copy
-        if let Some((sid, format_id)) = take_initiate_paste() {
-            if sid == session_id {
-                set_requested_format(format_id);
+        if let Some(format_id) = take_initiate_paste(&session_id) {
+            {
+                set_requested_format(&session_id, format_id);
                 let messages = active_stage
                     .get_svc_processor_mut::<Cliprdr<Client>>()
                     .and_then(|cliprdr| cliprdr.initiate_paste(ClipboardFormatId(format_id)).ok());

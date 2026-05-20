@@ -83,7 +83,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
       let credentialRef = editing?.credentialRef;
 
       if (authType === "password") {
-        credentialRef = `${host.trim()}:${port}:${username.trim()}`;
+        if (!credentialRef) credentialRef = crypto.randomUUID();
         if (password) {
           await credentials.save(credentialRef, password);
         }

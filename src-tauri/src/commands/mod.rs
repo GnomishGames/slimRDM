@@ -3,6 +3,7 @@ pub mod connections;
 pub mod credentials;
 pub mod data;
 pub mod groups;
+pub mod known_hosts;
 pub mod rdp;
 pub mod ssh;
 pub mod tunnel_utils;

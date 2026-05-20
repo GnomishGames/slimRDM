@@ -1,6 +1,12 @@
 use keyring::Entry;
 
-const SERVICE: &str = "slimrdm";
+pub const SERVICE: &str = "slimrdm";
+
+/// Synchronous keyring fetch for use inside async command handlers.
+/// Returns None if the ref is absent or the credential doesn't exist.
+pub fn get_credential_sync(ref_key: &str) -> Option<String> {
+    Entry::new(SERVICE, ref_key).ok()?.get_password().ok()
+}
 
 #[tauri::command]
 pub async fn save_credential(ref_key: String, password: String) -> std::result::Result<(), String> {
