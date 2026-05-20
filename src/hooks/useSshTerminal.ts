@@ -9,12 +9,23 @@ import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { Connection } from "../types";
 
-async function resolveCredentials(conn: Connection): Promise<{
+type ResolvedCreds = {
   username: string;
   authType: string;
   password?: string;
   privateKeyPath?: string;
-}> {
+};
+
+type JumpHostParams = {
+  host: string;
+  port: number;
+  username: string;
+  authType: string;
+  password?: string;
+  privateKeyPath?: string;
+};
+
+async function resolveCredentials(conn: Connection): Promise<ResolvedCreds> {
   if (conn.useGroupCredentials && conn.groupId) {
     const group = useAppStore.getState().groups.find((g) => g.id === conn.groupId);
     if (group?.username) {
@@ -33,6 +44,21 @@ async function resolveCredentials(conn: Connection): Promise<{
     password = await credentials.get(conn.credentialRef).catch(() => undefined);
   }
   return { username: conn.username, authType: conn.authType, password, privateKeyPath: conn.privateKeyPath };
+}
+
+async function resolveJumpHostParams(conn: Connection): Promise<JumpHostParams | undefined> {
+  if (!conn.jumpHostId) return undefined;
+  const jumpConn = useAppStore.getState().connections.find((c) => c.id === conn.jumpHostId);
+  if (!jumpConn || jumpConn.connectionType !== "ssh") return undefined;
+  const creds = await resolveCredentials(jumpConn);
+  return {
+    host: jumpConn.host,
+    port: jumpConn.port,
+    username: creds.username,
+    authType: creds.authType,
+    password: creds.password,
+    privateKeyPath: creds.privateKeyPath ?? jumpConn.privateKeyPath,
+  };
 }
 
 interface UseSshTerminalOptions {
@@ -109,6 +135,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
               reconnectTimerRef.current = setTimeout(async () => {
                 const conn = connectionRef.current;
                 const resolved = await resolveCredentials(conn);
+                const jumpHostParams = await resolveJumpHostParams(conn);
                 try {
                   await ssh.connect({
                     sessionId,
@@ -122,6 +149,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
                     connectTimeout: sshDefaults.connectTimeout,
                     initialCols: termRef.current?.cols,
                     initialRows: termRef.current?.rows,
+                    jumpHostParams,
                   });
                 } catch (err) {
                   const msg = String(err);
@@ -182,6 +210,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
     try {
       const { sshDefaults } = useSettingsStore.getState();
       const resolved = await resolveCredentials(connection);
+      const jumpHostParams = await resolveJumpHostParams(connection);
       await ssh.connect({
         sessionId,
         host: connection.host,
@@ -194,6 +223,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
         connectTimeout: sshDefaults.connectTimeout,
         initialCols: term?.cols,
         initialRows: term?.rows,
+        jumpHostParams,
       });
     } catch (err) {
       const msg = String(err);

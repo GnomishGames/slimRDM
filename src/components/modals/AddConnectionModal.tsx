@@ -34,9 +34,15 @@ export function AddConnectionModal({ onClose, editing }: Props) {
   const [privateKeyPath, setPrivateKeyPath] = useState(editing?.privateKeyPath ?? "");
   const [groupId, setGroupId] = useState<string>(editing?.groupId ?? "");
   const [useGroupCredentials, setUseGroupCredentials] = useState(editing?.useGroupCredentials ?? false);
+  const [jumpHostId, setJumpHostId] = useState<string>(editing?.jumpHostId ?? "");
   const [notes, setNotes] = useState(editing?.notes ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+
+  const { connections } = useAppStore();
+  const sshConnections = connections.filter(
+    (c) => c.connectionType === "ssh" && c.id !== editing?.id
+  );
 
   const selectedGroup = groups.find((g: Group) => g.id === groupId);
   const groupHasCredentials = !!(selectedGroup?.credentialRef || selectedGroup?.privateKeyPath);
@@ -105,6 +111,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
           credentialRef,
           notes: notes.trim() || undefined,
           useGroupCredentials: effectiveGroupCredentials,
+          jumpHostId: jumpHostId || undefined,
         });
       } else {
         await addConnection({
@@ -120,6 +127,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
           notes: notes.trim() || undefined,
           tags: [],
           useGroupCredentials: effectiveGroupCredentials,
+          jumpHostId: jumpHostId || undefined,
         });
       }
       onClose();
@@ -234,6 +242,21 @@ export function AddConnectionModal({ onClose, editing }: Props) {
                 </span>
               </div>
             </div>
+          )}
+
+          {sshConnections.length > 0 && (
+            <Field label="Jump host">
+              <select
+                className="field-input field-select"
+                value={jumpHostId}
+                onChange={e => setJumpHostId(e.target.value)}
+              >
+                <option value="">None</option>
+                {sshConnections.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label} ({c.host})</option>
+                ))}
+              </select>
+            </Field>
           )}
 
           <Field label="Notes">

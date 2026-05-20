@@ -5,6 +5,7 @@ use tokio::sync::mpsc;
 use serde::{Deserialize, Serialize};
 
 use crate::store::AuthType;
+use crate::commands::tunnel_utils::{JumpHostParams, open_jump_channel};
 
 /// Shared map of session_id -> input sender
 type SshSessions = Arc<Mutex<HashMap<String, mpsc::UnboundedSender<SshInput>>>>;
@@ -35,6 +36,7 @@ pub struct SshConnectParams {
     pub connect_timeout: Option<u32>,    // seconds; None = no timeout
     pub initial_cols: Option<u16>,
     pub initial_rows: Option<u16>,
+    pub jump_host_params: Option<JumpHostParams>,
 }
 
 /// Emitted to frontend for terminal output
@@ -171,15 +173,38 @@ async fn run_ssh_session(
         close_tx,
     };
 
-    let addr = format!("{}:{}", params.host, params.port);
-    let connect_fut = client::connect(config, addr, handler);
-    let mut session = if let Some(secs) = params.connect_timeout.filter(|&s| s > 0) {
-        tokio::time::timeout(std::time::Duration::from_secs(secs.into()), connect_fut)
+    let mut session = if let Some(ref jump) = params.jump_host_params {
+        let stream = open_jump_channel(jump, &params.host, params.port)
+            .await
+            .map_err(|e| format!("Jump host error: {e}"))?;
+        if let Some(secs) = params.connect_timeout.filter(|&s| s > 0) {
+            tokio::time::timeout(
+                std::time::Duration::from_secs(secs.into()),
+                client::connect_stream(config, stream, handler),
+            )
             .await
             .map_err(|_| format!("Connection timed out after {}s", secs))?
             .map_err(|e| format!("Connection failed: {}", e))?
+        } else {
+            client::connect_stream(config, stream, handler)
+                .await
+                .map_err(|e| format!("Connection failed: {}", e))?
+        }
     } else {
-        connect_fut.await.map_err(|e| format!("Connection failed: {}", e))?
+        let addr = format!("{}:{}", params.host, params.port);
+        if let Some(secs) = params.connect_timeout.filter(|&s| s > 0) {
+            tokio::time::timeout(
+                std::time::Duration::from_secs(secs.into()),
+                client::connect(config, addr, handler),
+            )
+            .await
+            .map_err(|_| format!("Connection timed out after {}s", secs))?
+            .map_err(|e| format!("Connection failed: {}", e))?
+        } else {
+            client::connect(config, addr, handler)
+                .await
+                .map_err(|e| format!("Connection failed: {}", e))?
+        }
     };
 
     // Authenticate

@@ -28,6 +28,7 @@ export interface Connection {
   createdAt: number;
   lastConnected?: number;
   useGroupCredentials?: boolean;
+  jumpHostId?: string;
 }
 
 export interface Group {

@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -23,6 +24,7 @@ use ironrdp_cliprdr::{Cliprdr, Client};
 use ironrdp_cliprdr::pdu::{ClipboardFormat, ClipboardFormatId, FormatDataResponse};
 use ironrdp_cliprdr::backend::CliprdrBackendFactory;
 
+use crate::commands::tunnel_utils::{JumpHostParams, open_jump_channel};
 use crate::commands::clipboard::{
     TauriCliprdrBackendFactory, get_clipboard_data,
     take_format_list_pending, set_format_list_pending, get_pending_clipboard_request,
@@ -55,6 +57,7 @@ pub struct RdpConnectParams {
     pub height: Option<u32>,
     pub performance_flags: Option<RdpPerformanceFlags>,
     pub connection_quality: Option<String>,
+    pub jump_host_params: Option<JumpHostParams>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,19 +120,40 @@ pub async fn rdp_connect(app: AppHandle, params: RdpConnectParams) -> Result<(),
 async fn run_rdp_session(
     app: &AppHandle,
     params: RdpConnectParams,
-    mut input_rx: mpsc::UnboundedReceiver<SessionInput>,
+    input_rx: mpsc::UnboundedReceiver<SessionInput>,
 ) -> Result<(), String> {
     let session_id = params.session_id.clone();
-
     emit_status(app, &session_id, "connecting", None);
+
+    if let Some(ref jump) = params.jump_host_params {
+        let stream = open_jump_channel(jump, &params.host, params.port)
+            .await
+            .map_err(|e| format!("Jump host error: {e}"))?;
+        let client_addr: std::net::SocketAddr = "127.0.0.1:0".parse().unwrap();
+        run_rdp_inner(app, params, input_rx, stream, client_addr).await
+    } else {
+        let tcp = TcpStream::connect(format!("{}:{}", params.host, params.port))
+            .await
+            .map_err(|e| format!("TCP connect failed: {e}"))?;
+        let client_addr = tcp.local_addr().map_err(|e| e.to_string())?;
+        run_rdp_inner(app, params, input_rx, tcp, client_addr).await
+    }
+}
+
+async fn run_rdp_inner<S>(
+    app: &AppHandle,
+    params: RdpConnectParams,
+    mut input_rx: mpsc::UnboundedReceiver<SessionInput>,
+    stream: S,
+    client_addr: std::net::SocketAddr,
+) -> Result<(), String>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    let session_id = params.session_id.clone();
 
     let width = params.width.unwrap_or(1280) as u16;
     let height = params.height.unwrap_or(800) as u16;
-
-    let tcp = TcpStream::connect(format!("{}:{}", params.host, params.port))
-        .await
-        .map_err(|e| format!("TCP connect failed: {e}"))?;
-    let client_addr = tcp.local_addr().map_err(|e| e.to_string())?;
 
     let config = Config {
         credentials: Credentials::UsernamePassword {
@@ -172,7 +196,7 @@ async fn run_rdp_session(
         timezone_info: TimezoneInfo::default(),
     };
 
-    let mut framed = TokioFramed::new(tcp);
+    let mut framed = TokioFramed::new(stream);
     let connector = ClientConnector::new(config, client_addr);
 
     let clipboard_factory = TauriCliprdrBackendFactory::new(app.clone(), params.session_id.clone());

@@ -69,6 +69,15 @@ const SCANCODE: Record<string, { code: number; extended?: boolean }> = {
   ContextMenu: { code: 0x5d, extended: true },
 };
 
+type JumpHostParams = {
+  host: string;
+  port: number;
+  username: string;
+  authType: string;
+  password?: string;
+  privateKeyPath?: string;
+};
+
 async function resolveCredentials(conn: Connection): Promise<{ username: string; password?: string }> {
   if (conn.useGroupCredentials && conn.groupId) {
     const group = useAppStore.getState().groups.find((g) => g.id === conn.groupId);
@@ -83,6 +92,20 @@ async function resolveCredentials(conn: Connection): Promise<{ username: string;
     ? await credentials.get(conn.credentialRef).catch(() => undefined)
     : undefined;
   return { username: conn.username, password };
+}
+
+async function resolveJumpHostParams(conn: Connection): Promise<JumpHostParams | undefined> {
+  if (!conn.jumpHostId) return undefined;
+  const jumpConn = useAppStore.getState().connections.find((c) => c.id === conn.jumpHostId);
+  if (!jumpConn || jumpConn.connectionType !== "ssh") return undefined;
+  const creds = await resolveCredentials(jumpConn);
+  return {
+    host: jumpConn.host,
+    port: jumpConn.port,
+    username: creds.username,
+    authType: jumpConn.authType,
+    password: creds.password,
+  };
 }
 
 interface UseRdpCanvasOptions {
@@ -171,6 +194,7 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
       );
 
       const { username: resolvedUsername, password } = await resolveCredentials(connection);
+      const jumpHostParams = await resolveJumpHostParams(connection);
 
       const wrapper = canvasRef.current?.parentElement;
       await rdp.connect({
@@ -183,6 +207,7 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
         height: wrapper?.clientHeight ?? rdpDefaults.height,
         performanceFlags: rdpDefaults.performanceFlags,
         connectionQuality: rdpDefaults.connectionQuality,
+        jumpHostParams,
       }).catch((err: unknown) => {
         setSessionStatus(sessionId, "error", String(err));
       });

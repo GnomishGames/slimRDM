@@ -23,6 +23,8 @@ pub struct Connection {
     pub last_connected: Option<u64>,
     #[serde(default)]
     pub use_group_credentials: bool,
+    #[serde(default)]
+    pub jump_host_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -77,6 +79,8 @@ pub struct NewConnection {
     pub tags: Vec<String>,
     #[serde(default)]
     pub use_group_credentials: bool,
+    #[serde(default)]
+    pub jump_host_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

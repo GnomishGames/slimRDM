@@ -15,6 +15,15 @@ export const ssh = {
     connectTimeout?: number;
     initialCols?: number;
     initialRows?: number;
+    jumpHostParams?: {
+      host: string;
+      port: number;
+      username: string;
+      authType: string;
+      password?: string;
+      privateKeyPath?: string;
+      privateKeyPassphrase?: string;
+    };
   }) => invoke("ssh_connect", { params }),
 
   sendInput: (sessionId: string, data: string) =>
@@ -48,6 +57,15 @@ export const rdp = {
       enableDesktopComposition: boolean;
     };
     connectionQuality?: string;
+    jumpHostParams?: {
+      host: string;
+      port: number;
+      username: string;
+      authType: string;
+      password?: string;
+      privateKeyPath?: string;
+      privateKeyPassphrase?: string;
+    };
   }) => invoke("rdp_connect", { params }),
 
   disconnect: (sessionId: string) =>
