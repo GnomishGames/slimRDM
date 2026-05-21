@@ -31,6 +31,7 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "CANVAS") return;
+      if (target.isContentEditable || target.closest(".terminal-container")) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "/") {
         e.preventDefault();
