@@ -74,6 +74,31 @@ jobs:
         with:
           arch: x64
 
+      - name: Extract changelog for this release
+        id: changelog
+        shell: bash
+        run: |
+          body=$(awk '/^## \[/{count++; if(count==2) exit} count==1 && !/^## \[/{print}' CHANGELOG.md \
+            | grep -v '^---$' \
+            | sed -e 's/[[:space:]]*$//' \
+            | awk 'NF || prev_nf { print } { prev_nf = NF }')
+          body="$body
+
+## Downloads
+
+| Platform | File | Notes |
+|----------|------|-------|
+| Linux | \`.deb\` | Debian / Ubuntu |
+| Linux | \`.AppImage\` | Universal (any distro) |
+| macOS | \`.dmg\` | Universal — Intel + Apple Silicon |
+| Windows | \`.exe\` | NSIS installer |
+
+> **macOS**: builds are unsigned. Right-click → Open on first launch to bypass Gatekeeper.
+> **Windows**: SmartScreen may warn on first run — click \"More info → Run anyway\"."
+          echo "body<<CHANGELOG_EOF" >> "$GITHUB_OUTPUT"
+          echo "$body" >> "$GITHUB_OUTPUT"
+          echo "CHANGELOG_EOF" >> "$GITHUB_OUTPUT"
+
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -81,25 +106,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: SlimRDM ${{ github.ref_name }}
-          releaseBody: |
-            ## What's New
-
-            - **N shortcut** — press `N` from anywhere to open the New Connection dialog
-            - **Collapse / Expand All** — new button in the sidebar header to collapse or expand all folder groups at once
-            - **Click to focus tab** — single-clicking a connection that's already open switches to its tab
-            - Reordered sidebar header buttons: expand/collapse → new folder → new connection
-
-            ## Downloads
-
-            | Platform | File | Notes |
-            |----------|------|-------|
-            | Linux | `.deb` | Debian / Ubuntu |
-            | Linux | `.AppImage` | Universal (any distro) |
-            | macOS | `.dmg` | Universal — Intel + Apple Silicon |
-            | Windows | `.exe` | NSIS installer |
-
-            > **macOS**: builds are unsigned. Right-click → Open on first launch to bypass Gatekeeper.
-            > **Windows**: SmartScreen may warn on first run — click "More info → Run anyway".
+          releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
