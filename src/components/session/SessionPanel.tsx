@@ -2,6 +2,7 @@ import { useRef, useEffect } from "react";
 import { Session } from "../../types";
 import { useSshTerminal } from "../../hooks/useSshTerminal";
 import { useRdpCanvas } from "../../hooks/useRdpCanvas";
+import { useTrmTerminal } from "../../hooks/useTrmTerminal";
 import clsx from "clsx";
 
 interface Props {
@@ -14,6 +15,8 @@ export function SessionPanel({ session, active }: Props) {
     <div className={clsx("session-panel", active && "session-panel--active")}>
       {session.connection.connectionType === "ssh" ? (
         <SshPanel session={session} active={active} />
+      ) : session.connection.connectionType === "trm" ? (
+        <TrmPanel session={session} active={active} />
       ) : (
         <RdpPanel session={session} />
       )}
@@ -24,6 +27,35 @@ export function SessionPanel({ session, active }: Props) {
 function SshPanel({ session, active }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { connect, term, fit } = useSshTerminal({
+    sessionId: session.id,
+    connection: session.connection,
+    containerRef,
+  });
+
+  useEffect(() => {
+    if (!active) return;
+    connect().catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (active) {
+      fit();
+      term.current?.focus();
+    }
+  }, [active]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="terminal-container"
+      style={{ display: active ? "block" : "none" }}
+    />
+  );
+}
+
+function TrmPanel({ session, active }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { connect, term, fit } = useTrmTerminal({
     sessionId: session.id,
     connection: session.connection,
     containerRef,

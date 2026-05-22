@@ -396,7 +396,7 @@ function BehaviorSection() {
 }
 
 function DataSection() {
-  const { connections, groups, loadConnections, loadGroups } = useAppStore();
+  const { connections, groups, loadConnections, loadGroups, loadCategories } = useAppStore();
   const [importMode, setImportMode] = useState<"merge" | "replace">("merge");
   const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -423,7 +423,7 @@ function DataSection() {
     setStatus(null);
     try {
       const result = await data.import(path as string, importMode === "replace");
-      await Promise.all([loadConnections(), loadGroups()]);
+      await Promise.all([loadConnections(), loadGroups(), loadCategories()]);
       setStatus({ type: "ok", msg: `Imported ${result.connectionsAdded} connection(s) and ${result.groupsAdded} group(s).` });
     } catch (err) {
       setStatus({ type: "err", msg: String(err) });

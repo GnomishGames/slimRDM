@@ -30,7 +30,7 @@ function Tab({
   onActivate: () => void;
   onClose: () => void;
 }) {
-  const isRdp = session.connection.connectionType === "rdp";
+  const connType = session.connection.connectionType;
   const statusColor = {
     connecting: "#d29922",
     connected: "#3fb950",
@@ -44,7 +44,7 @@ function Tab({
       onClick={onActivate}
     >
       <span className="tab-icon">
-        {isRdp ? <Monitor size={12} /> : <Terminal size={12} />}
+        {connType === "rdp" ? <Monitor size={12} /> : connType === "trm" ? <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: -1 }}>$_</span> : <Terminal size={12} />}
       </span>
       <span className="tab-dot" style={{ background: statusColor }} />
       <span className="tab-label">{session.connection.label}</span>

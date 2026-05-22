@@ -1,3 +1,4 @@
+pub mod categories;
 pub mod clipboard;
 pub mod connections;
 pub mod credentials;
@@ -6,5 +7,6 @@ pub mod groups;
 pub mod known_hosts;
 pub mod rdp;
 pub mod ssh;
+pub mod trm;
 pub mod tunnel_utils;
 pub mod updates;

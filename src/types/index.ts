@@ -1,4 +1,4 @@
-export type ConnectionType = "ssh" | "rdp";
+export type ConnectionType = "ssh" | "rdp" | "trm";
 export type AuthType = "password" | "public_key" | "agent";
 export type SessionStatus = "connecting" | "connected" | "disconnected" | "error";
 export type CursorStyle = "block" | "bar" | "underline";
@@ -29,6 +29,13 @@ export interface Connection {
   lastConnected?: number;
   useGroupCredentials?: boolean;
   jumpHostId?: string;
+  workingDirectory?: string;
+  shellPath?: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
 }
 
 export interface Group {
@@ -41,6 +48,7 @@ export interface Group {
   credentialRef?: string;
   authType?: AuthType;
   privateKeyPath?: string;
+  categoryId?: string;
 }
 
 export interface Session {
@@ -94,4 +102,6 @@ export interface NewConnectionForm {
   password?: string;
   notes?: string;
   tags: string[];
+  workingDirectory?: string;
+  shellPath?: string;
 }

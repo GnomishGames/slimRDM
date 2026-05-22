@@ -5,15 +5,17 @@ import { credentials, dialog } from "../../utils/tauri";
 import { AuthType, Group } from "../../types";
 import clsx from "clsx";
 
+
 interface Props {
   group: Group;
   onClose: () => void;
 }
 
 export function EditGroupModal({ group, onClose }: Props) {
-  const { updateGroup } = useAppStore();
+  const { updateGroup, categories } = useAppStore();
   const mouseDownOnBackdrop = useRef(false);
   const [name, setName] = useState(group.name);
+  const [categoryId, setCategoryId] = useState(group.categoryId ?? "");
   const [username, setUsername] = useState(group.username ?? "");
   const [authType, setAuthType] = useState<AuthType>(group.authType ?? "password");
   const [password, setPassword] = useState("");
@@ -62,6 +64,7 @@ export function EditGroupModal({ group, onClose }: Props) {
       await updateGroup({
         ...group,
         name: name.trim(),
+        categoryId: categoryId || undefined,
         username: username.trim() || undefined,
         credentialRef,
         authType: username.trim() ? authType : undefined,
@@ -103,6 +106,17 @@ export function EditGroupModal({ group, onClose }: Props) {
               autoFocus
             />
           </Field>
+
+          {categories.length > 0 && (
+            <Field label="Category">
+              <select className="field-input field-select" value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+                <option value="">No category</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </Field>
+          )}
 
           <div className="field-section-divider">Group Credentials</div>
 

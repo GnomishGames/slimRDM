@@ -84,9 +84,31 @@ export const rdp = {
     invoke("rdp_resize", { sessionId, width, height }),
 };
 
+export const trm = {
+  connect: (params: {
+    sessionId: string;
+    workingDirectory?: string;
+    shellPath?: string;
+    initialCols?: number;
+    initialRows?: number;
+  }) => invoke("trm_connect", { params }),
+
+  sendInput: (sessionId: string, data: string) =>
+    invoke("trm_send_input", { sessionId, data }),
+
+  resize: (sessionId: string, cols: number, rows: number) =>
+    invoke("trm_resize", { sessionId, cols, rows }),
+
+  disconnect: (sessionId: string) =>
+    invoke("trm_disconnect", { sessionId }),
+};
+
 export const dialog = {
   pickFile: (title: string) =>
     openDialog({ title, multiple: false, directory: false }),
+
+  pickDirectory: (title: string) =>
+    openDialog({ title, multiple: false, directory: true }),
 
   saveFile: (title: string, defaultPath?: string) =>
     saveDialog({ title, defaultPath }),

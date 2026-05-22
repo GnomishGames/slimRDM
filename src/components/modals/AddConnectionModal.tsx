@@ -11,31 +11,36 @@ import clsx from "clsx";
 interface Props {
   onClose: () => void;
   editing?: Connection;
+  prefill?: Connection;
 }
 
 const DEFAULTS: Record<ConnectionType, { port: number; authType: AuthType }> = {
   ssh: { port: 22, authType: "password" },
   rdp: { port: 3389, authType: "password" },
+  trm: { port: 0, authType: "password" },
 };
 
-export function AddConnectionModal({ onClose, editing }: Props) {
+export function AddConnectionModal({ onClose, editing, prefill }: Props) {
   const { addConnection, updateConnection, groups } = useAppStore();
   const mouseDownOnBackdrop = useRef(false);
   const sshDefaults = useSettingsStore((s) => s.sshDefaults);
   const isEdit = !!editing;
+  const source = editing ?? prefill;
 
-  const [connType, setConnType] = useState<ConnectionType>(editing?.connectionType ?? "ssh");
-  const [label, setLabel] = useState(editing?.label ?? "");
-  const [host, setHost] = useState(editing?.host ?? "");
-  const [port, setPort] = useState(editing?.port ?? (connType === "ssh" ? sshDefaults.port : DEFAULTS.rdp.port));
-  const [username, setUsername] = useState(editing?.username ?? (connType === "ssh" ? sshDefaults.username : ""));
-  const [authType, setAuthType] = useState<AuthType>(editing?.authType ?? "password");
+  const [connType, setConnType] = useState<ConnectionType>(source?.connectionType ?? "ssh");
+  const [label, setLabel] = useState(prefill ? `${prefill.label} (copy)` : (editing?.label ?? ""));
+  const [host, setHost] = useState(source?.host ?? "");
+  const [port, setPort] = useState(source?.port ?? (connType === "ssh" ? sshDefaults.port : DEFAULTS.rdp.port));
+  const [username, setUsername] = useState(source?.username ?? (connType === "ssh" ? sshDefaults.username : ""));
+  const [authType, setAuthType] = useState<AuthType>(source?.authType ?? "password");
   const [password, setPassword] = useState("");
-  const [privateKeyPath, setPrivateKeyPath] = useState(editing?.privateKeyPath ?? "");
-  const [groupId, setGroupId] = useState<string>(editing?.groupId ?? "");
-  const [useGroupCredentials, setUseGroupCredentials] = useState(editing?.useGroupCredentials ?? false);
-  const [jumpHostId, setJumpHostId] = useState<string>(editing?.jumpHostId ?? "");
-  const [notes, setNotes] = useState(editing?.notes ?? "");
+  const [privateKeyPath, setPrivateKeyPath] = useState(source?.privateKeyPath ?? "");
+  const [groupId, setGroupId] = useState<string>(source?.groupId ?? "");
+  const [useGroupCredentials, setUseGroupCredentials] = useState(source?.useGroupCredentials ?? false);
+  const [jumpHostId, setJumpHostId] = useState<string>(source?.jumpHostId ?? "");
+  const [workingDirectory, setWorkingDirectory] = useState(source?.workingDirectory ?? "");
+  const [shellPath, setShellPath] = useState(source?.shellPath ?? "");
+  const [notes, setNotes] = useState(source?.notes ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -47,17 +52,18 @@ export function AddConnectionModal({ onClose, editing }: Props) {
   const selectedGroup = groups.find((g: Group) => g.id === groupId);
   const groupHasCredentials = !!(selectedGroup?.credentialRef || selectedGroup?.privateKeyPath);
 
-  // Pre-load existing password when editing
+  // Pre-load existing password when editing or duplicating
   useEffect(() => {
-    if (editing?.credentialRef && editing.authType === "password") {
-      credentials.get(editing.credentialRef).then(setPassword).catch(() => {});
+    const ref = source?.credentialRef;
+    if (ref && source?.authType === "password") {
+      credentials.get(ref).then(setPassword).catch(() => {});
     }
   }, []);
 
   const switchType = (t: ConnectionType) => {
     setConnType(t);
     if (!isEdit) {
-      setPort(t === "ssh" ? sshDefaults.port : DEFAULTS.rdp.port);
+      setPort(t === "ssh" ? sshDefaults.port : DEFAULTS[t].port);
       setAuthType(DEFAULTS[t].authType);
       if (t === "ssh" && sshDefaults.username) setUsername(sshDefaults.username);
     }
@@ -66,11 +72,13 @@ export function AddConnectionModal({ onClose, editing }: Props) {
   const validate = () => {
     const e: Record<string, string> = {};
     if (!label.trim()) e.label = "Required";
-    if (!host.trim()) e.host = "Required";
-    if (!port || port < 1 || port > 65535) e.port = "1–65535";
-    if (!username.trim() && !useGroupCredentials) e.username = "Required";
-    if (authType === "password" && !isEdit && !password && !useGroupCredentials) e.password = "Required";
-    if (authType === "public_key" && !privateKeyPath.trim() && !useGroupCredentials) e.privateKeyPath = "Required";
+    if (connType !== "trm") {
+      if (!host.trim()) e.host = "Required";
+      if (!port || port < 1 || port > 65535) e.port = "1–65535";
+      if (!username.trim() && !useGroupCredentials) e.username = "Required";
+      if (authType === "password" && !isEdit && !password && !useGroupCredentials) e.password = "Required";
+      if (authType === "public_key" && !privateKeyPath.trim() && !useGroupCredentials) e.privateKeyPath = "Required";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -97,37 +105,43 @@ export function AddConnectionModal({ onClose, editing }: Props) {
 
       const effectiveGroupCredentials = useGroupCredentials && groupHasCredentials;
 
+      const isTrm = connType === "trm";
+
       if (isEdit) {
         await updateConnection({
           ...editing,
           label: label.trim(),
-          host: host.trim(),
-          port,
-          username: username.trim(),
+          host: isTrm ? "" : host.trim(),
+          port: isTrm ? 0 : port,
+          username: isTrm ? "" : username.trim(),
           connectionType: connType,
           authType,
           groupId: groupId || undefined,
           privateKeyPath: authType === "public_key" ? privateKeyPath.trim() : undefined,
-          credentialRef,
+          credentialRef: isTrm ? undefined : credentialRef,
           notes: notes.trim() || undefined,
-          useGroupCredentials: effectiveGroupCredentials,
-          jumpHostId: jumpHostId || undefined,
+          useGroupCredentials: isTrm ? false : effectiveGroupCredentials,
+          jumpHostId: isTrm ? undefined : jumpHostId || undefined,
+          workingDirectory: isTrm ? workingDirectory.trim() || undefined : undefined,
+          shellPath: isTrm ? shellPath.trim() || undefined : undefined,
         });
       } else {
         await addConnection({
           label: label.trim(),
-          host: host.trim(),
-          port,
-          username: username.trim(),
+          host: isTrm ? "" : host.trim(),
+          port: isTrm ? 0 : port,
+          username: isTrm ? "" : username.trim(),
           connectionType: connType,
           authType,
           groupId: groupId || undefined,
           privateKeyPath: authType === "public_key" ? privateKeyPath.trim() : undefined,
-          credentialRef,
+          credentialRef: isTrm ? undefined : credentialRef,
           notes: notes.trim() || undefined,
           tags: [],
-          useGroupCredentials: effectiveGroupCredentials,
-          jumpHostId: jumpHostId || undefined,
+          useGroupCredentials: isTrm ? false : effectiveGroupCredentials,
+          jumpHostId: isTrm ? undefined : jumpHostId || undefined,
+          workingDirectory: isTrm ? workingDirectory.trim() || undefined : undefined,
+          shellPath: isTrm ? shellPath.trim() || undefined : undefined,
         });
       }
       onClose();
@@ -146,7 +160,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
     >
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-title">{isEdit ? "Edit Connection" : "New Connection"}</span>
+          <span className="modal-title">{isEdit ? "Edit Connection" : prefill ? "Duplicate Connection" : "New Connection"}</span>
           <button className="icon-btn" onClick={onClose}><X size={15} /></button>
         </div>
 
@@ -160,6 +174,9 @@ export function AddConnectionModal({ onClose, editing }: Props) {
               <button type="button" className={clsx("type-btn", connType === "rdp" && "type-btn--active")} onClick={() => switchType("rdp")}>
                 <Monitor size={13} /> RDP
               </button>
+              <button type="button" className={clsx("type-btn", connType === "trm" && "type-btn--active")} onClick={() => switchType("trm")}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: -1 }}>$_</span> TRM
+              </button>
             </div>
           </div>
 
@@ -167,19 +184,50 @@ export function AddConnectionModal({ onClose, editing }: Props) {
             <input className={clsx("field-input", errors.label && "field-input--error")} placeholder="My Server" value={label} onChange={e => setLabel(e.target.value)} autoFocus />
           </Field>
 
-          <div className="field-row-group">
-            <Field label="Host" error={errors.host} grow>
-              <input className={clsx("field-input", errors.host && "field-input--error")} placeholder="192.168.1.1" value={host} onChange={e => setHost(e.target.value)} />
-            </Field>
-            <Field label="Port" error={errors.port} width={80}>
-              <input className={clsx("field-input", errors.port && "field-input--error")} type="number" value={port} onChange={e => setPort(Number(e.target.value))} />
-            </Field>
-          </div>
+          {connType === "trm" ? (
+            <>
+              <Field label="Directory">
+                <div className="field-browse">
+                  <input
+                    className="field-input"
+                    placeholder="~/Documents (leave blank for home)"
+                    value={workingDirectory}
+                    onChange={e => setWorkingDirectory(e.target.value)}
+                  />
+                  <button type="button" className="btn btn--ghost btn--icon" onClick={async () => {
+                    const picked = await dialog.pickDirectory("Select working directory");
+                    if (picked) setWorkingDirectory(picked as string);
+                  }}>
+                    <FolderOpen size={14} />
+                  </button>
+                </div>
+              </Field>
+              <Field label="Shell">
+                <input
+                  className="field-input"
+                  placeholder="Default system shell (e.g. pwsh, cmd.exe, /bin/zsh)"
+                  value={shellPath}
+                  onChange={e => setShellPath(e.target.value)}
+                />
+              </Field>
+            </>
+          ) : (
+            <>
+              <div className="field-row-group">
+                <Field label="Host" error={errors.host} grow>
+                  <input className={clsx("field-input", errors.host && "field-input--error")} placeholder="192.168.1.1" value={host} onChange={e => setHost(e.target.value)} />
+                </Field>
+                <Field label="Port" error={errors.port} width={80}>
+                  <input className={clsx("field-input", errors.port && "field-input--error")} type="number" value={port} onChange={e => setPort(Number(e.target.value))} />
+                </Field>
+              </div>
 
-          {!useGroupCredentials && (
-            <Field label="Username" error={errors.username}>
-              <input className={clsx("field-input", errors.username && "field-input--error")} placeholder="admin" value={username} onChange={e => setUsername(e.target.value)} />
-            </Field>
+              {!useGroupCredentials && (
+                <Field label="Username" error={errors.username}>
+                  <input className={clsx("field-input", errors.username && "field-input--error")} placeholder="admin" value={username} onChange={e => setUsername(e.target.value)} />
+                </Field>
+              )}
+            </>
           )}
 
           {!useGroupCredentials && connType === "ssh" && (
@@ -195,13 +243,13 @@ export function AddConnectionModal({ onClose, editing }: Props) {
             </div>
           )}
 
-          {!useGroupCredentials && authType === "password" && (
+          {!useGroupCredentials && authType === "password" && connType !== "trm" && (
             <Field label={"Password"} error={errors.password}>
               <input className={clsx("field-input", errors.password && "field-input--error")} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
             </Field>
           )}
 
-          {!useGroupCredentials && authType === "public_key" && (
+          {!useGroupCredentials && authType === "public_key" && connType !== "trm" && (
             <Field label="Key path" error={errors.privateKeyPath}>
               <div className="field-browse">
                 <input className={clsx("field-input", errors.privateKeyPath && "field-input--error")} placeholder="~/.ssh/id_rsa" value={privateKeyPath} onChange={e => setPrivateKeyPath(e.target.value)} />
@@ -226,7 +274,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
             </Field>
           )}
 
-          {groupHasCredentials && (
+          {groupHasCredentials && connType !== "trm" && (
             <div className="field-row">
               <label className="field-label">Group credentials</label>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -244,7 +292,7 @@ export function AddConnectionModal({ onClose, editing }: Props) {
             </div>
           )}
 
-          {sshConnections.length > 0 && (
+          {sshConnections.length > 0 && connType !== "trm" && (
             <Field label="Jump host">
               <select
                 className="field-input field-select"

@@ -1,11 +1,12 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { Connection, Group, Session, SessionStatus } from "../types";
+import { Category, Connection, Group, Session, SessionStatus } from "../types";
 
 interface AppState {
   // Data
   connections: Connection[];
   groups: Group[];
+  categories: Category[];
   sessions: Session[];
   activeSessionId: string | null;
 
@@ -17,12 +18,16 @@ interface AppState {
   // Actions
   loadConnections: () => Promise<void>;
   loadGroups: () => Promise<void>;
+  loadCategories: () => Promise<void>;
   addConnection: (conn: Omit<Connection, "id" | "createdAt">) => Promise<Connection>;
   updateConnection: (conn: Connection) => Promise<void>;
   deleteConnection: (id: string) => Promise<void>;
   addGroup: (group: Omit<Group, "id">) => Promise<Group>;
   updateGroup: (group: Group) => Promise<void>;
   deleteGroup: (id: string) => Promise<void>;
+  addCategory: (cat: { name: string }) => Promise<Category>;
+  updateCategory: (cat: Category) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
 
   openSession: (connection: Connection) => string;
   closeSession: (sessionId: string) => void;
@@ -36,6 +41,7 @@ interface AppState {
 export const useAppStore = create<AppState>((set) => ({
   connections: [],
   groups: [],
+  categories: [],
   sessions: [],
   activeSessionId: null,
   searchQuery: "",
@@ -50,6 +56,11 @@ export const useAppStore = create<AppState>((set) => ({
   loadGroups: async () => {
     const groups = await invoke<Group[]>("list_groups");
     set({ groups });
+  },
+
+  loadCategories: async () => {
+    const categories = await invoke<Category[]>("list_categories");
+    set({ categories });
   },
 
   addConnection: async (conn) => {
@@ -102,6 +113,25 @@ export const useAppStore = create<AppState>((set) => ({
       connections: s.connections.map((c) =>
         c.groupId === id ? { ...c, groupId: undefined } : c
       ),
+    }));
+  },
+
+  addCategory: async (cat) => {
+    const added = await invoke<Category>("add_category", { category: cat });
+    set((s) => ({ categories: [...s.categories, added] }));
+    return added;
+  },
+
+  updateCategory: async (cat) => {
+    const updated = await invoke<Category>("update_category", { category: cat });
+    set((s) => ({ categories: s.categories.map((c) => (c.id === updated.id ? updated : c)) }));
+  },
+
+  deleteCategory: async (id) => {
+    await invoke("delete_category", { id });
+    set((s) => ({
+      categories: s.categories.filter((c) => c.id !== id),
+      groups: s.groups.map((g) => g.categoryId === id ? { ...g, categoryId: undefined } : g),
     }));
   },
 

@@ -10,7 +10,7 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import "./styles.css";
 
 export default function App() {
-  const { loadConnections, loadGroups, sessions, activeSessionId, setSearchQuery } = useAppStore();
+  const { loadConnections, loadGroups, loadCategories, sessions, activeSessionId, setSearchQuery } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateDownloading, setUpdateDownloading] = useState(false);
@@ -20,6 +20,7 @@ export default function App() {
   useEffect(() => {
     loadConnections();
     loadGroups();
+    loadCategories();
     loadSettings();
     updates.check().then((info) => {
       if (info.hasUpdate) {

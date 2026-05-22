@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, ChevronUp, ChevronsUp, ChevronsDown, Folder, FolderPlus, Settings, LockKeyhole, Key, Cpu } from "lucide-react";
+import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, ChevronUp, ChevronsUp, ChevronsDown, Folder, FolderPlus, Layers, Settings, LockKeyhole, Key, Cpu } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
-import { Connection, Group } from "../../types";
+import { Category, Connection, Group } from "../../types";
 import { AddConnectionModal } from "../modals/AddConnectionModal";
 import { EditGroupModal } from "../modals/EditGroupModal";
 import { SettingsModal } from "../modals/SettingsModal";
@@ -10,21 +10,47 @@ import clsx from "clsx";
 
 export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
   const {
-    connections, groups, searchQuery,
+    connections, groups, categories, searchQuery,
     setSearchQuery, openSession, deleteConnection,
-    addGroup, deleteGroup,
+    addGroup, deleteGroup, addCategory, updateCategory, deleteCategory,
   } = useAppStore();
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [addingGroup, setAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [renamingCategoryId, setRenamingCategoryId] = useState<string | null>(null);
+  const [renameCategoryName, setRenameCategoryName] = useState("");
   const groupInputRef = useRef<HTMLInputElement>(null);
+  const categoryInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (addingGroup) groupInputRef.current?.focus();
   }, [addingGroup]);
+
+  useEffect(() => {
+    if (addingCategory) categoryInputRef.current?.focus();
+  }, [addingCategory]);
+
+  useEffect(() => {
+    if (renamingCategoryId) renameInputRef.current?.focus();
+  }, [renamingCategoryId]);
+
+  // Expand new categories by default
+  useEffect(() => {
+    if (categories.length > 0) {
+      setExpandedCategories((prev) => {
+        const next = new Set(prev);
+        categories.forEach((c) => next.add(c.id));
+        return next;
+      });
+    }
+  }, [categories.length]);
 
   const toggleGroup = (id: string) => {
     setExpandedGroups((prev) => {
@@ -34,8 +60,15 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
     });
   };
 
-  const allCollapsed = groups.length > 0 && expandedGroups.size === 0;
+  const toggleCategory = (id: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
+  const allCollapsed = groups.length > 0 && expandedGroups.size === 0;
   const handleCollapseAll = () => setExpandedGroups(new Set());
   const handleExpandAll = () => setExpandedGroups(new Set(groups.map((g) => g.id)));
 
@@ -48,6 +81,34 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
     setAddingGroup(false);
   };
 
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) { setAddingCategory(false); return; }
+    const added = await addCategory({ name });
+    setExpandedCategories((prev) => new Set(prev).add(added.id));
+    setNewCategoryName("");
+    setAddingCategory(false);
+  };
+
+  const handleRenameCategory = async (cat: Category) => {
+    const name = renameCategoryName.trim();
+    if (name && name !== cat.name) {
+      await updateCategory({ ...cat, name });
+    }
+    setRenamingCategoryId(null);
+  };
+
+  const handleDeleteCategory = async (cat: Category) => {
+    await deleteCategory(cat.id);
+  };
+
+  const handleDeleteGroup = async (group: Group) => {
+    if (group.credentialRef) {
+      await credentials.delete(group.credentialRef).catch(() => {});
+    }
+    await deleteGroup(group.id);
+  };
+
   const filtered = connections.filter((c) => {
     const q = searchQuery.toLowerCase();
     return (
@@ -58,17 +119,11 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
   });
 
   const ungrouped = filtered.filter((c) => !c.groupId);
-  const grouped = groups.map((g) => ({
-    group: g,
-    connections: filtered.filter((c) => c.groupId === g.id),
-  }));
 
-  const handleDeleteGroup = async (group: Group) => {
-    if (group.credentialRef) {
-      await credentials.delete(group.credentialRef).catch(() => {});
-    }
-    await deleteGroup(group.id);
-  };
+  // Separate groups by category membership
+  const categorizedGroups = (catId: string) =>
+    groups.filter((g) => g.categoryId === catId);
+  const uncategorizedGroups = groups.filter((g) => !g.categoryId);
 
   return (
     <>
@@ -87,6 +142,9 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
                 {allCollapsed ? <ChevronsDown size={15} /> : <ChevronsUp size={15} />}
               </button>
             )}
+            <button className="icon-btn" onClick={() => setAddingCategory(true)} title="New Category">
+              <Layers size={15} />
+            </button>
             <button className="icon-btn" onClick={() => setAddingGroup(true)} title="New Group">
               <FolderPlus size={15} />
             </button>
@@ -107,15 +165,54 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
         </div>
 
         <div className="connection-list">
-          {ungrouped.map((conn) => (
-            <ConnectionItem key={conn.id} conn={conn} onOpen={openSession} onDelete={deleteConnection} />
-          ))}
+          {/* Categories with their groups */}
+          {categories.map((cat) => {
+            const catGroups = categorizedGroups(cat.id);
+            const catConnCount = catGroups.reduce(
+              (sum, g) => sum + filtered.filter((c) => c.groupId === g.id).length, 0
+            );
+            const expanded = expandedCategories.has(cat.id);
+            const isRenaming = renamingCategoryId === cat.id;
 
-          {grouped.map(({ group, connections: gc }) => (
+            return (
+              <CategorySection
+                key={cat.id}
+                category={cat}
+                count={catConnCount}
+                expanded={expanded}
+                isRenaming={isRenaming}
+                renameCategoryName={renameCategoryName}
+                renameInputRef={renameInputRef}
+                onToggle={() => toggleCategory(cat.id)}
+                onStartRename={() => { setRenamingCategoryId(cat.id); setRenameCategoryName(cat.name); }}
+                onRename={() => handleRenameCategory(cat)}
+                onRenameChange={setRenameCategoryName}
+                onDelete={() => handleDeleteCategory(cat)}
+              >
+                {expanded && catGroups.map((group) => (
+                  <GroupSection
+                    key={group.id}
+                    group={group}
+                    connections={filtered.filter((c) => c.groupId === group.id)}
+                    expanded={expandedGroups.has(group.id)}
+                    onToggle={() => toggleGroup(group.id)}
+                    onEdit={() => setEditingGroup(group)}
+                    onDelete={() => handleDeleteGroup(group)}
+                    onOpen={openSession}
+                    onDeleteConn={deleteConnection}
+                    indented
+                  />
+                ))}
+              </CategorySection>
+            );
+          })}
+
+          {/* Uncategorized groups */}
+          {uncategorizedGroups.map((group) => (
             <GroupSection
               key={group.id}
               group={group}
-              connections={gc}
+              connections={filtered.filter((c) => c.groupId === group.id)}
               expanded={expandedGroups.has(group.id)}
               onToggle={() => toggleGroup(group.id)}
               onEdit={() => setEditingGroup(group)}
@@ -124,6 +221,29 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
               onDeleteConn={deleteConnection}
             />
           ))}
+
+          {/* Ungrouped connections */}
+          {ungrouped.map((conn) => (
+            <ConnectionItem key={conn.id} conn={conn} onOpen={openSession} onDelete={deleteConnection} />
+          ))}
+
+          {addingCategory && (
+            <div className="new-category-row">
+              <Layers size={12} style={{ color: "var(--accent)", flexShrink: 0 }} />
+              <input
+                ref={categoryInputRef}
+                className="new-group-input"
+                placeholder="Category name…"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAddCategory();
+                  if (e.key === "Escape") { setAddingCategory(false); setNewCategoryName(""); }
+                }}
+                onBlur={handleAddCategory}
+              />
+            </div>
+          )}
 
           {addingGroup && (
             <div className="new-group-row">
@@ -143,7 +263,7 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
             </div>
           )}
 
-          {filtered.length === 0 && !addingGroup && (
+          {filtered.length === 0 && !addingGroup && !addingCategory && (
             <div className="empty-list">
               {searchQuery ? "No results" : "No connections yet"}
             </div>
@@ -160,7 +280,68 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
   );
 }
 
-function GroupSection({ group, connections, expanded, onToggle, onEdit, onDelete, onOpen, onDeleteConn }: {
+function CategorySection({
+  category, count, expanded, isRenaming, renameCategoryName, renameInputRef,
+  onToggle, onStartRename, onRename, onRenameChange, onDelete, children,
+}: {
+  category: Category;
+  count: number;
+  expanded: boolean;
+  isRenaming: boolean;
+  renameCategoryName: string;
+  renameInputRef: React.RefObject<HTMLInputElement>;
+  onToggle: () => void;
+  onStartRename: () => void;
+  onRename: () => void;
+  onRenameChange: (v: string) => void;
+  onDelete: () => void;
+  children?: React.ReactNode;
+}) {
+  const [showMenu, setShowMenu] = useState(false);
+
+  return (
+    <div className="category-section">
+      <div
+        className="category-bar-wrap"
+        onContextMenu={(e) => { e.preventDefault(); setShowMenu(true); }}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setShowMenu(false);
+        }}
+        tabIndex={0}
+      >
+        <button className="category-bar" onClick={onToggle}>
+          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          {isRenaming ? (
+            <input
+              ref={renameInputRef}
+              className="category-rename-input"
+              value={renameCategoryName}
+              onChange={(e) => onRenameChange(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); onRename(); }
+                if (e.key === "Escape") onRename();
+              }}
+              onBlur={onRename}
+            />
+          ) : (
+            <span className="category-name">{category.name}</span>
+          )}
+          <span className="category-count">{count}</span>
+        </button>
+        {showMenu && (
+          <div className="context-menu" onMouseDown={(e) => e.preventDefault()}>
+            <button onClick={() => { onStartRename(); setShowMenu(false); }}>Rename</button>
+            <button onClick={() => { onDelete(); setShowMenu(false); }} className="danger">Delete Category</button>
+          </div>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function GroupSection({ group, connections, expanded, onToggle, onEdit, onDelete, onOpen, onDeleteConn, indented }: {
   group: Group;
   connections: Connection[];
   expanded: boolean;
@@ -169,11 +350,12 @@ function GroupSection({ group, connections, expanded, onToggle, onEdit, onDelete
   onDelete: () => void;
   onOpen: (c: Connection) => void;
   onDeleteConn: (id: string) => void;
+  indented?: boolean;
 }) {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
-    <div className="group-section">
+    <div className={clsx("group-section", indented && "group-section--indented")}>
       <div
         className="group-header-wrap"
         onContextMenu={(e) => { e.preventDefault(); setShowMenu(true); }}
@@ -224,16 +406,22 @@ function ConnectionItem({
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const [editing, setEditing] = useState(false);
-  const isRdp = conn.connectionType === "rdp";
+  const [duplicating, setDuplicating] = useState(false);
+  const connType = conn.connectionType;
+  const isRdp = connType === "rdp";
+  const isTrm = connType === "trm";
   const session = useAppStore((s) => s.sessions.find((sess) => sess.connectionId === conn.id));
-  const addConnection = useAppStore((s) => s.addConnection);
   const closeSession = useAppStore((s) => s.closeSession);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
+  const groups = useAppStore((s) => s.groups);
   const connStatus = session?.status ?? "idle";
 
-  const handleDuplicate = async () => {
-    const { id: _id, createdAt: _ts, lastConnected: _lc, ...rest } = conn;
-    await addConnection({ ...rest, label: `${conn.label} (copy)` });
+  const displayUsername = conn.useGroupCredentials && conn.groupId
+    ? (groups.find((g) => g.id === conn.groupId)?.username ?? conn.username)
+    : conn.username;
+
+  const handleDuplicate = () => {
+    setDuplicating(true);
     setShowMenu(false);
   };
 
@@ -246,6 +434,7 @@ function ConnectionItem({
   return (
     <>
       {editing && <AddConnectionModal editing={conn} onClose={() => setEditing(false)} />}
+      {duplicating && <AddConnectionModal prefill={conn} onClose={() => setDuplicating(false)} />}
       <div
         className={clsx("connection-item", indent && "connection-item--indented")}
         onContextMenu={(e) => { e.preventDefault(); setShowMenu(true); }}
@@ -257,14 +446,20 @@ function ConnectionItem({
           onClick={session ? () => setActiveSession(session.id) : undefined}
           onDoubleClick={() => onOpen(conn)}
         >
-          <span className={clsx("conn-icon", isRdp ? "conn-icon--rdp" : "conn-icon--ssh", `conn-icon--${connStatus}`)}>
-            {isRdp ? <Monitor size={13} /> : <Terminal size={13} />}
+          <span className={clsx("conn-icon", isRdp ? "conn-icon--rdp" : isTrm ? "conn-icon--trm" : "conn-icon--ssh", `conn-icon--${connStatus}`)}>
+            {isRdp ? <Monitor size={13} /> : isTrm ? <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: -1 }}>$_</span> : <Terminal size={13} />}
           </span>
           <span className="conn-info">
             <span className="conn-label">{conn.label}</span>
             <span className="conn-host">
-              <AuthIcon authType={conn.authType} useGroupCredentials={conn.useGroupCredentials} />
-              {conn.username}@{conn.host}:{conn.port}
+              {isTrm ? (
+                conn.workingDirectory ?? "~"
+              ) : (
+                <>
+                  <AuthIcon authType={conn.authType} useGroupCredentials={conn.useGroupCredentials} />
+                  {displayUsername}@{conn.host}:{conn.port}
+                </>
+              )}
             </span>
           </span>
         </button>

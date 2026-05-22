@@ -21,6 +21,7 @@ pub async fn add_group(app: tauri::AppHandle, group: NewGroup) -> std::result::R
         credential_ref: None,
         auth_type: None,
         private_key_path: None,
+        category_id: group.category_id,
     };
     store.groups.push(g.clone());
     save_store(&app, &store).map_err(|e| e.to_string())?;
@@ -40,6 +41,7 @@ pub async fn update_group(app: tauri::AppHandle, group: UpdateGroup) -> std::res
     g.credential_ref = group.credential_ref;
     g.auth_type = group.auth_type;
     g.private_key_path = group.private_key_path;
+    g.category_id = group.category_id;
     let updated = g.clone();
     save_store(&app, &store).map_err(|e| e.to_string())?;
     Ok(updated)

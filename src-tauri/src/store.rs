@@ -25,6 +25,8 @@ pub struct Connection {
     pub use_group_credentials: bool,
     #[serde(default)]
     pub jump_host_id: Option<String>,
+    pub working_directory: Option<String>,
+    pub shell_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -32,6 +34,7 @@ pub struct Connection {
 pub enum ConnectionType {
     Ssh,
     Rdp,
+    Trm,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -40,6 +43,26 @@ pub enum AuthType {
     Password,
     PublicKey,
     Agent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Category {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewCategory {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCategory {
+    pub id: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +77,7 @@ pub struct Group {
     pub credential_ref: Option<String>,
     pub auth_type: Option<AuthType>,
     pub private_key_path: Option<String>,
+    pub category_id: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -61,6 +85,8 @@ pub struct Group {
 pub struct AppStore {
     pub connections: Vec<Connection>,
     pub groups: Vec<Group>,
+    #[serde(default)]
+    pub categories: Vec<Category>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -81,6 +107,8 @@ pub struct NewConnection {
     pub use_group_credentials: bool,
     #[serde(default)]
     pub jump_host_id: Option<String>,
+    pub working_directory: Option<String>,
+    pub shell_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -89,6 +117,7 @@ pub struct NewGroup {
     pub name: String,
     pub color: Option<String>,
     pub icon: Option<String>,
+    pub category_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -102,6 +131,7 @@ pub struct UpdateGroup {
     pub credential_ref: Option<String>,
     pub auth_type: Option<AuthType>,
     pub private_key_path: Option<String>,
+    pub category_id: Option<String>,
 }
 
 pub fn init(_app: &AppHandle) -> anyhow::Result<()> {

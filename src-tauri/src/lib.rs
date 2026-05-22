@@ -26,6 +26,11 @@ pub fn run() {
             commands::connections::update_connection,
             commands::connections::delete_connection,
             commands::connections::get_connection,
+            // Categories
+            commands::categories::list_categories,
+            commands::categories::add_category,
+            commands::categories::update_category,
+            commands::categories::delete_category,
             // Groups
             commands::groups::list_groups,
             commands::groups::add_group,
@@ -36,6 +41,11 @@ pub fn run() {
             commands::ssh::ssh_disconnect,
             commands::ssh::ssh_send_input,
             commands::ssh::ssh_resize,
+            // TRM (local terminal)
+            commands::trm::trm_connect,
+            commands::trm::trm_disconnect,
+            commands::trm::trm_send_input,
+            commands::trm::trm_resize,
             // RDP
             commands::rdp::rdp_connect,
             commands::rdp::rdp_disconnect,
