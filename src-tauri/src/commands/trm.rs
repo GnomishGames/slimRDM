@@ -114,7 +114,16 @@ async fn run_trm_session(
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     if let Some(ref dir) = params.working_directory {
-        cmd.cwd(dir);
+        let expanded = if dir.starts_with("~/") || dir == "~" {
+            if let Ok(home) = std::env::var("HOME") {
+                dir.replacen("~", &home, 1)
+            } else {
+                dir.clone()
+            }
+        } else {
+            dir.clone()
+        };
+        cmd.cwd(expanded);
     }
 
     let portable_pty::PtyPair { master, slave } = pair;
