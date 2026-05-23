@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1] - 2026-05-22
+
+### Fixed
+- TRM terminal: set `TERM=xterm-256color` and `COLORTERM=truecolor` on the spawned shell so color output works correctly.
+
+---
+
 ## [1.3.0] - 2026-05-22
 
 ### Added

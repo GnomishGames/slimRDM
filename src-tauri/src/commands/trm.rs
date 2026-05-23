@@ -111,6 +111,8 @@ async fn run_trm_session(
     };
 
     let mut cmd = CommandBuilder::new(&shell);
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
     if let Some(ref dir) = params.working_directory {
         cmd.cwd(dir);
     }
