@@ -17,21 +17,26 @@ export default function App() {
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+  const activeIdRef = useRef(activeSessionId);
+  activeIdRef.current = activeSessionId;
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || sessions.length < 2) return;
+      if (!e.ctrlKey || sessionsRef.current.length < 2) return;
       if (e.key !== "PageDown" && e.key !== "PageUp") return;
       e.preventDefault();
-      const idx = sessions.findIndex((s) => s.id === activeSessionId);
+      const idx = sessionsRef.current.findIndex((s) => s.id === activeIdRef.current);
       if (idx === -1) return;
       const next = e.key === "PageDown"
-        ? (idx + 1) % sessions.length
-        : (idx - 1 + sessions.length) % sessions.length;
-      setActiveSession(sessions[next].id);
+        ? (idx + 1) % sessionsRef.current.length
+        : (idx - 1 + sessionsRef.current.length) % sessionsRef.current.length;
+      setActiveSession(sessionsRef.current[next].id);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [sessions, activeSessionId]);
+  }, []);
 
   useEffect(() => {
     loadConnections();
