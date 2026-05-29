@@ -31,6 +31,7 @@ export const DEFAULT_BEHAVIOR: BehaviorSettings = {
   copyOnSelect: false,
   confirmCloseTab: false,
   autoReconnect: false,
+  splitView: false,
 };
 
 export const DEFAULT_TERMINAL: TerminalSettings = {

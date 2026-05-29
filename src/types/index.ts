@@ -89,6 +89,7 @@ export interface BehaviorSettings {
   copyOnSelect: boolean;
   confirmCloseTab: boolean;
   autoReconnect: boolean;
+  splitView: boolean;
 }
 
 export interface NewConnectionForm {

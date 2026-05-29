@@ -7,16 +7,21 @@ import clsx from "clsx";
 
 interface Props {
   session: Session;
+  /** Whether this panel is visible and should maintain a terminal connection. */
   active: boolean;
+  /** Whether this panel has keyboard focus (fit + term.focus). */
+  focused: boolean;
+  /** Inline style for split-view absolute positioning. */
+  style?: React.CSSProperties;
 }
 
-export function SessionPanel({ session, active }: Props) {
+export function SessionPanel({ session, active, focused, style }: Props) {
   return (
-    <div className={clsx("session-panel", active && "session-panel--active")}>
+    <div className={clsx("session-panel", active && "session-panel--active")} style={style}>
       {session.connection.connectionType === "ssh" ? (
-        <SshPanel session={session} active={active} />
+        <SshPanel session={session} active={active} focused={focused} />
       ) : session.connection.connectionType === "trm" ? (
-        <TrmPanel session={session} active={active} />
+        <TrmPanel session={session} active={active} focused={focused} />
       ) : (
         <RdpPanel session={session} />
       )}
@@ -24,7 +29,7 @@ export function SessionPanel({ session, active }: Props) {
   );
 }
 
-function SshPanel({ session, active }: Props) {
+function SshPanel({ session, active, focused }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { connect, term, fit } = useSshTerminal({
     sessionId: session.id,
@@ -38,11 +43,12 @@ function SshPanel({ session, active }: Props) {
   }, []);
 
   useEffect(() => {
-    if (active) {
-      fit();
-      term.current?.focus();
-    }
+    if (active) fit();
   }, [active]);
+
+  useEffect(() => {
+    if (focused) term.current?.focus();
+  }, [focused]);
 
   return (
     <div
@@ -53,7 +59,7 @@ function SshPanel({ session, active }: Props) {
   );
 }
 
-function TrmPanel({ session, active }: Props) {
+function TrmPanel({ session, active, focused }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { connect, term, fit } = useTrmTerminal({
     sessionId: session.id,
@@ -67,11 +73,12 @@ function TrmPanel({ session, active }: Props) {
   }, []);
 
   useEffect(() => {
-    if (active) {
-      fit();
-      term.current?.focus();
-    }
+    if (active) fit();
   }, [active]);
+
+  useEffect(() => {
+    if (focused) term.current?.focus();
+  }, [focused]);
 
   return (
     <div

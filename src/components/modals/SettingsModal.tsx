@@ -369,6 +369,11 @@ function BehaviorSection() {
       label: "Auto-Reconnect",
       help: "Automatically reconnect SSH sessions after unexpected disconnects.",
     },
+    {
+      key: "splitView",
+      label: "Split View",
+      help: "Show up to 3 terminals side by side. Click a tab to add it to the current layout; drag the dividers to resize panes.",
+    },
   ];
 
   return (

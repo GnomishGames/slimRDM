@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { SessionTabs } from "./components/session/SessionTabs";
 import { SessionPanel } from "./components/session/SessionPanel";
@@ -9,9 +9,24 @@ import { updates, UpdateInfo } from "./utils/tauri";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import "./styles.css";
 
+const DIVIDER_PX = 4;
+const MIN_PANE_PCT = 10;
+
+function equalSizes(n: number): number[] {
+  if (n <= 0) return [];
+  const base = Math.floor(100 / n);
+  return Array.from({ length: n }, (_, i) => i < n - 1 ? base : 100 - base * (n - 1));
+}
+
 export default function App() {
-  const { loadConnections, loadGroups, loadCategories, sessions, activeSessionId, setSearchQuery, setActiveSession } = useAppStore();
+  const {
+    loadConnections, loadGroups, loadCategories,
+    sessions, activeSessionId, splitSessionIds, setSplitSessions,
+    setSearchQuery, setActiveSession,
+  } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
+  const splitView = useSettingsStore((s) => s.behavior.splitView);
+
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateDownloading, setUpdateDownloading] = useState(false);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -22,6 +37,27 @@ export default function App() {
   const activeIdRef = useRef(activeSessionId);
   activeIdRef.current = activeSessionId;
 
+  // Split view sizing state
+  const [splitSizes, setSplitSizes] = useState<number[]>([]);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Initialise split panes when split view is first enabled
+  useEffect(() => {
+    if (splitView && splitSessionIds.length === 0 && activeSessionId) {
+      setSplitSessions([activeSessionId]);
+    }
+  }, [splitView]);
+
+  // Reset to equal sizes whenever the pane count changes
+  const prevSplitCount = useRef(0);
+  useEffect(() => {
+    const n = splitSessionIds.length;
+    if (n === prevSplitCount.current) return;
+    prevSplitCount.current = n;
+    setSplitSizes(equalSizes(n));
+  }, [splitSessionIds.length]);
+
+  // Keyboard tab cycling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!e.ctrlKey || sessionsRef.current.length < 2) return;
@@ -70,6 +106,65 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // Drag-to-resize split panes
+  const handleDividerMouseDown = useCallback((dividerIdx: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startSizes = [...splitSizes];
+    const containerWidth = contentRef.current?.offsetWidth ?? 0;
+    const numDividers = startSizes.length - 1;
+    const availWidth = containerWidth - numDividers * DIVIDER_PX;
+    if (availWidth <= 0) return;
+
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const dpct = (dx / availWidth) * 100;
+      const left = startSizes[dividerIdx] + dpct;
+      const right = startSizes[dividerIdx + 1] - dpct;
+      if (left < MIN_PANE_PCT || right < MIN_PANE_PCT) return;
+      const next = [...startSizes];
+      next[dividerIdx] = left;
+      next[dividerIdx + 1] = right;
+      setSplitSizes(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [splitSizes]);
+
+  // Calculate absolute position style for a split pane
+  function getPaneStyle(splitIdx: number): React.CSSProperties {
+    if (!splitView || splitSizes.length <= splitIdx || splitSizes.length === 0) return {};
+    const numDividers = splitSizes.length - 1;
+    const prevPct = splitSizes.slice(0, splitIdx).reduce((a, b) => a + b, 0);
+    const leftPx = splitIdx * DIVIDER_PX - (prevPct / 100) * numDividers * DIVIDER_PX;
+    const widthPx = -(splitSizes[splitIdx] / 100) * numDividers * DIVIDER_PX;
+    return {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: leftPx === 0 ? `${prevPct}%` : `calc(${prevPct}% + ${leftPx}px)`,
+      width: widthPx === 0 ? `${splitSizes[splitIdx]}%` : `calc(${splitSizes[splitIdx]}% + ${widthPx}px)`,
+    };
+  }
+
+  // Calculate position for a drag-handle divider (placed after pane dividerIdx)
+  function getDividerStyle(dividerIdx: number): React.CSSProperties {
+    const numDividers = splitSizes.length - 1;
+    const prevPct = splitSizes.slice(0, dividerIdx + 1).reduce((a, b) => a + b, 0);
+    const leftPx = dividerIdx * DIVIDER_PX - (prevPct / 100) * numDividers * DIVIDER_PX;
+    return {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: leftPx === 0 ? `${prevPct}%` : `calc(${prevPct}% + ${leftPx}px)`,
+      width: DIVIDER_PX,
+    };
+  }
+
   return (
     <>
       {showAddModal && <AddConnectionModal onClose={() => setShowAddModal(false)} />}
@@ -105,14 +200,38 @@ export default function App() {
           {sessions.length > 0 ? (
             <>
               <SessionTabs />
-              <div className="session-content">
-                {sessions.map((session) => (
-                  <SessionPanel
-                    key={session.id}
-                    session={session}
-                    active={session.id === activeSessionId}
-                  />
-                ))}
+              {/*
+                All session panels live in the same container at all times — moving them
+                to a different parent would remount xterm and kill the connection.
+                In split mode we use absolute positioning to lay them out side by side.
+              */}
+              <div ref={contentRef} className="session-content">
+                {sessions.map((session) => {
+                  const splitIdx = splitView ? splitSessionIds.indexOf(session.id) : -1;
+                  const active = splitView ? splitIdx >= 0 : session.id === activeSessionId;
+                  const focused = session.id === activeSessionId;
+                  const style = splitView && splitIdx >= 0 ? getPaneStyle(splitIdx) : undefined;
+                  return (
+                    <SessionPanel
+                      key={session.id}
+                      session={session}
+                      active={active}
+                      focused={focused}
+                      style={style}
+                    />
+                  );
+                })}
+                {/* Drag-handle dividers between split panes */}
+                {splitView && splitSizes.length > 1 &&
+                  Array.from({ length: splitSizes.length - 1 }, (_, i) => (
+                    <div
+                      key={`divider-${i}`}
+                      className="split-divider"
+                      style={getDividerStyle(i)}
+                      onMouseDown={(e) => handleDividerMouseDown(i, e)}
+                    />
+                  ))
+                }
               </div>
             </>
           ) : (

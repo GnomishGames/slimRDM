@@ -504,6 +504,28 @@ html, body, #root {
   flex-direction: column;
 }
 
+/* Split-view: panels are absolutely positioned so they never leave the same
+   parent element — moving them would remount xterm and kill connections. */
+.session-panel--active[style*="position: absolute"] {
+  height: auto; /* top/bottom handles height */
+}
+
+/* Drag handle between split panes */
+.split-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--border);
+  cursor: col-resize;
+  z-index: 10;
+  transition: background 0.15s;
+}
+.split-divider:hover,
+.split-divider:active {
+  background: var(--accent);
+}
+
 /* ── Terminal ─────────────────────────────────────────── */
 .terminal-container {
   flex: 1;
