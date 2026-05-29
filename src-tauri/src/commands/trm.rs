@@ -159,13 +159,16 @@ async fn run_trm_session(
         message: None,
     });
 
-    // Send startup commands after a brief delay to let the shell initialize
+    // Send startup commands after a brief delay to let the shell initialize.
+    // Use \r alone (not \r\n) — that is the exact byte xterm.js sends for Enter,
+    // and it is what PTY line discipline expects to trigger execution.
     if let Some(ref cmds) = params.startup_commands {
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         for cmd in cmds.lines() {
             let cmd = cmd.trim();
             if !cmd.is_empty() {
-                let _ = writer.write_all(format!("{}\n", cmd).as_bytes());
+                let _ = writer.write_all(format!("{}\r", cmd).as_bytes());
+                let _ = writer.flush();
             }
         }
     }
