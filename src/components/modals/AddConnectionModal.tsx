@@ -41,6 +41,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
   const [workingDirectory, setWorkingDirectory] = useState(source?.workingDirectory ?? "");
   const [shellPath, setShellPath] = useState(source?.shellPath ?? "");
   const [startupCommands, setStartupCommands] = useState(source?.startupCommands ?? "");
+  const [autoConnect, setAutoConnect] = useState(source?.autoConnect ?? false);
   const [notes, setNotes] = useState(source?.notes ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -128,6 +129,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
           workingDirectory: isTrm ? workingDirectory.trim() || undefined : undefined,
           shellPath: isTrm ? shellPath.trim() || undefined : undefined,
           startupCommands: effectiveStartupCommands,
+          autoConnect,
         });
       } else {
         await addConnection({
@@ -147,6 +149,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
           workingDirectory: isTrm ? workingDirectory.trim() || undefined : undefined,
           shellPath: isTrm ? shellPath.trim() || undefined : undefined,
           startupCommands: effectiveStartupCommands,
+          autoConnect,
         });
       }
       onClose();
@@ -327,6 +330,20 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
               />
             </Field>
           )}
+
+          <div className="field-row field-row--toggle">
+            <label className="field-label">Auto Connect</label>
+            <button
+              type="button"
+              className={clsx("toggle", autoConnect && "toggle--on")}
+              onClick={() => setAutoConnect(!autoConnect)}
+              role="switch"
+              aria-checked={autoConnect}
+            >
+              <span className="toggle-thumb" />
+            </button>
+          </div>
+          <p className="field-help">Automatically open this connection when SlimRDM launches.</p>
 
           {errors._form && <div className="form-error">{errors._form}</div>}
 

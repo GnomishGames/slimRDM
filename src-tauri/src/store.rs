@@ -28,6 +28,8 @@ pub struct Connection {
     pub working_directory: Option<String>,
     pub shell_path: Option<String>,
     pub startup_commands: Option<String>,
+    #[serde(default)]
+    pub auto_connect: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -111,6 +113,8 @@ pub struct NewConnection {
     pub working_directory: Option<String>,
     pub shell_path: Option<String>,
     pub startup_commands: Option<String>,
+    #[serde(default)]
+    pub auto_connect: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

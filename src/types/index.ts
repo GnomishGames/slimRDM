@@ -32,6 +32,7 @@ export interface Connection {
   workingDirectory?: string;
   shellPath?: string;
   startupCommands?: string;
+  autoConnect?: boolean;
 }
 
 export interface Category {
@@ -108,4 +109,5 @@ export interface NewConnectionForm {
   workingDirectory?: string;
   shellPath?: string;
   startupCommands?: string;
+  autoConnect?: boolean;
 }

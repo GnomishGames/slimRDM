@@ -103,10 +103,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    loadConnections();
-    loadGroups();
-    loadCategories();
-    loadSettings();
+    Promise.all([loadConnections(), loadGroups(), loadCategories(), loadSettings()])
+      .then(() => {
+        const { connections, openSession } = useAppStore.getState();
+        connections
+          .filter((c) => c.autoConnect)
+          .forEach((c) => openSession(c));
+      });
     updates.check().then((info) => {
       if (info.hasUpdate) {
         setUpdateInfo(info);
