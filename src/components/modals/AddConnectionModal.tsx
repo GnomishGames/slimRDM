@@ -40,6 +40,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
   const [jumpHostId, setJumpHostId] = useState<string>(source?.jumpHostId ?? "");
   const [workingDirectory, setWorkingDirectory] = useState(source?.workingDirectory ?? "");
   const [shellPath, setShellPath] = useState(source?.shellPath ?? "");
+  const [startupCommands, setStartupCommands] = useState(source?.startupCommands ?? "");
   const [notes, setNotes] = useState(source?.notes ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -107,6 +108,8 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
 
       const isTrm = connType === "trm";
 
+      const effectiveStartupCommands = connType !== "rdp" ? startupCommands.trim() || undefined : undefined;
+
       if (isEdit) {
         await updateConnection({
           ...editing,
@@ -124,6 +127,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
           jumpHostId: isTrm ? undefined : jumpHostId || undefined,
           workingDirectory: isTrm ? workingDirectory.trim() || undefined : undefined,
           shellPath: isTrm ? shellPath.trim() || undefined : undefined,
+          startupCommands: effectiveStartupCommands,
         });
       } else {
         await addConnection({
@@ -142,6 +146,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
           jumpHostId: isTrm ? undefined : jumpHostId || undefined,
           workingDirectory: isTrm ? workingDirectory.trim() || undefined : undefined,
           shellPath: isTrm ? shellPath.trim() || undefined : undefined,
+          startupCommands: effectiveStartupCommands,
         });
       }
       onClose();
@@ -310,6 +315,18 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
           <Field label="Notes">
             <textarea className="field-input field-textarea" placeholder="Optional notes..." value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
           </Field>
+
+          {connType !== "rdp" && (
+            <Field label="Startup Commands">
+              <textarea
+                className="field-input field-textarea"
+                placeholder={"Commands to run on connect (one per line)\n\ncd /var/log\ntail -f syslog"}
+                value={startupCommands}
+                onChange={e => setStartupCommands(e.target.value)}
+                rows={3}
+              />
+            </Field>
+          )}
 
           {errors._form && <div className="form-error">{errors._form}</div>}
 

@@ -25,6 +25,7 @@ pub struct TrmConnectParams {
     pub session_id: String,
     pub working_directory: Option<String>,
     pub shell_path: Option<String>,
+    pub startup_commands: Option<String>,
     pub initial_cols: Option<u16>,
     pub initial_rows: Option<u16>,
 }
@@ -157,6 +158,17 @@ async fn run_trm_session(
         status: "connected".into(),
         message: None,
     });
+
+    // Send startup commands after a brief delay to let the shell initialize
+    if let Some(ref cmds) = params.startup_commands {
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        for cmd in cmds.lines() {
+            let cmd = cmd.trim();
+            if !cmd.is_empty() {
+                let _ = writer.write_all(format!("{}\n", cmd).as_bytes());
+            }
+        }
+    }
 
     loop {
         tokio::select! {

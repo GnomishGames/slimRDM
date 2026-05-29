@@ -27,6 +27,7 @@ pub struct Connection {
     pub jump_host_id: Option<String>,
     pub working_directory: Option<String>,
     pub shell_path: Option<String>,
+    pub startup_commands: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -109,6 +110,7 @@ pub struct NewConnection {
     pub jump_host_id: Option<String>,
     pub working_directory: Option<String>,
     pub shell_path: Option<String>,
+    pub startup_commands: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
