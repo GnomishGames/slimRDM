@@ -90,6 +90,7 @@ export interface BehaviorSettings {
   confirmCloseTab: boolean;
   autoReconnect: boolean;
   splitView: boolean;
+  splitViewDirection: "vertical" | "horizontal";
 }
 
 export interface NewConnectionForm {

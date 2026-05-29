@@ -505,22 +505,32 @@ html, body, #root {
 }
 
 /* Split-view: panels are absolutely positioned so they never leave the same
-   parent element — moving them would remount xterm and kill connections. */
-.session-panel--active[style*="position: absolute"] {
-  height: auto; /* top/bottom handles height */
-}
+   parent element — moving them would remount xterm and kill connections.
+   Inline styles set left/width (vertical) or top/height (horizontal). */
 
 /* Drag handle between split panes */
 .split-divider {
   position: absolute;
+  background: var(--border);
+  z-index: 10;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.split-divider--vertical {
   top: 0;
   bottom: 0;
   width: 4px;
-  background: var(--border);
   cursor: col-resize;
-  z-index: 10;
-  transition: background 0.15s;
 }
+
+.split-divider--horizontal {
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: row-resize;
+}
+
 .split-divider:hover,
 .split-divider:active {
   background: var(--accent);

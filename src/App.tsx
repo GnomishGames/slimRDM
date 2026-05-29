@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { SessionTabs } from "./components/session/SessionTabs";
 import { SessionPanel } from "./components/session/SessionPanel";
@@ -18,6 +18,22 @@ function equalSizes(n: number): number[] {
   return Array.from({ length: n }, (_, i) => i < n - 1 ? base : 100 - base * (n - 1));
 }
 
+/** Offset in % and px for a pane or divider along the split axis. */
+function axisOffset(
+  idx: number,
+  sizes: number[],
+  numDividers: number,
+): { pct: number; px: number } {
+  const pct = sizes.slice(0, idx).reduce((a, b) => a + b, 0);
+  const px = idx * DIVIDER_PX - (pct / 100) * numDividers * DIVIDER_PX;
+  return { pct, px };
+}
+
+function calcStr(pct: number, px: number): string {
+  if (px === 0) return `${pct}%`;
+  return `calc(${pct}% + ${px}px)`;
+}
+
 export default function App() {
   const {
     loadConnections, loadGroups, loadCategories,
@@ -26,6 +42,7 @@ export default function App() {
   } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const splitView = useSettingsStore((s) => s.behavior.splitView);
+  const splitViewDirection = useSettingsStore((s) => s.behavior.splitViewDirection);
 
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateDownloading, setUpdateDownloading] = useState(false);
@@ -37,25 +54,36 @@ export default function App() {
   const activeIdRef = useRef(activeSessionId);
   activeIdRef.current = activeSessionId;
 
-  // Split view sizing state
+  // User-dragged sizes (percentages, sum=100). Length may lag splitSessionIds.length
+  // by one render cycle — use effectiveSizes below instead.
   const [splitSizes, setSplitSizes] = useState<number[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Initialise split panes when split view is first enabled
+  // Always length-matched to splitSessionIds. Falls back to equal sizes if the
+  // dragged sizes array doesn't match yet (happens on the transitional render
+  // after a pane is added/removed before the resetting effect fires).
+  const effectiveSizes = useMemo(() => {
+    const n = splitSessionIds.length;
+    if (splitSizes.length === n) return splitSizes;
+    return equalSizes(n);
+  }, [splitSizes, splitSessionIds.length]);
+
+  // Reset to equal sizes when the number of panes changes.
+  useEffect(() => {
+    setSplitSizes(equalSizes(splitSessionIds.length));
+  }, [splitSessionIds.length]);
+
+  // Reset to equal sizes when direction changes (axes swap, old sizes are meaningless).
+  useEffect(() => {
+    setSplitSizes(equalSizes(splitSessionIds.length));
+  }, [splitViewDirection]);
+
+  // Seed the first split pane when split view is enabled with no panes yet.
   useEffect(() => {
     if (splitView && splitSessionIds.length === 0 && activeSessionId) {
       setSplitSessions([activeSessionId]);
     }
   }, [splitView]);
-
-  // Reset to equal sizes whenever the pane count changes
-  const prevSplitCount = useRef(0);
-  useEffect(() => {
-    const n = splitSessionIds.length;
-    if (n === prevSplitCount.current) return;
-    prevSplitCount.current = n;
-    setSplitSizes(equalSizes(n));
-  }, [splitSessionIds.length]);
 
   // Keyboard tab cycling
   useEffect(() => {
@@ -106,25 +134,28 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Drag-to-resize split panes
+  // Drag-to-resize split panes — works for both directions.
   const handleDividerMouseDown = useCallback((dividerIdx: number, e: React.MouseEvent) => {
     e.preventDefault();
-    const startX = e.clientX;
-    const startSizes = [...splitSizes];
-    const containerWidth = contentRef.current?.offsetWidth ?? 0;
+    const isHoriz = splitViewDirection === "horizontal";
+    const startPos = isHoriz ? e.clientY : e.clientX;
+    const startSizes = [...effectiveSizes];
+    const containerSize = isHoriz
+      ? (contentRef.current?.offsetHeight ?? 0)
+      : (contentRef.current?.offsetWidth ?? 0);
     const numDividers = startSizes.length - 1;
-    const availWidth = containerWidth - numDividers * DIVIDER_PX;
-    if (availWidth <= 0) return;
+    const availSize = containerSize - numDividers * DIVIDER_PX;
+    if (availSize <= 0) return;
 
     const onMove = (ev: MouseEvent) => {
-      const dx = ev.clientX - startX;
-      const dpct = (dx / availWidth) * 100;
-      const left = startSizes[dividerIdx] + dpct;
-      const right = startSizes[dividerIdx + 1] - dpct;
-      if (left < MIN_PANE_PCT || right < MIN_PANE_PCT) return;
+      const delta = (isHoriz ? ev.clientY : ev.clientX) - startPos;
+      const dpct = (delta / availSize) * 100;
+      const a = startSizes[dividerIdx] + dpct;
+      const b = startSizes[dividerIdx + 1] - dpct;
+      if (a < MIN_PANE_PCT || b < MIN_PANE_PCT) return;
       const next = [...startSizes];
-      next[dividerIdx] = left;
-      next[dividerIdx + 1] = right;
+      next[dividerIdx] = a;
+      next[dividerIdx + 1] = b;
       setSplitSizes(next);
     };
     const onUp = () => {
@@ -133,34 +164,58 @@ export default function App() {
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-  }, [splitSizes]);
+  }, [effectiveSizes, splitViewDirection]);
 
-  // Calculate absolute position style for a split pane
+  // Inline style for a split pane at the given index.
   function getPaneStyle(splitIdx: number): React.CSSProperties {
-    if (!splitView || splitSizes.length <= splitIdx || splitSizes.length === 0) return {};
-    const numDividers = splitSizes.length - 1;
-    const prevPct = splitSizes.slice(0, splitIdx).reduce((a, b) => a + b, 0);
-    const leftPx = splitIdx * DIVIDER_PX - (prevPct / 100) * numDividers * DIVIDER_PX;
-    const widthPx = -(splitSizes[splitIdx] / 100) * numDividers * DIVIDER_PX;
+    if (!splitView || effectiveSizes.length === 0) return {};
+    const n = effectiveSizes.length;
+    const numDividers = n - 1;
+    const size = effectiveSizes[splitIdx];
+    const { pct: posPct, px: posPx } = axisOffset(splitIdx, effectiveSizes, numDividers);
+    const sizePx = -(size / 100) * numDividers * DIVIDER_PX;
+
+    if (splitViewDirection === "horizontal") {
+      return {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: calcStr(posPct, posPx),
+        height: calcStr(size, sizePx),
+      };
+    }
     return {
       position: "absolute",
       top: 0,
       bottom: 0,
-      left: leftPx === 0 ? `${prevPct}%` : `calc(${prevPct}% + ${leftPx}px)`,
-      width: widthPx === 0 ? `${splitSizes[splitIdx]}%` : `calc(${splitSizes[splitIdx]}% + ${widthPx}px)`,
+      left: calcStr(posPct, posPx),
+      width: calcStr(size, sizePx),
     };
   }
 
-  // Calculate position for a drag-handle divider (placed after pane dividerIdx)
+  // Inline style for the drag-handle divider placed after pane dividerIdx.
   function getDividerStyle(dividerIdx: number): React.CSSProperties {
-    const numDividers = splitSizes.length - 1;
-    const prevPct = splitSizes.slice(0, dividerIdx + 1).reduce((a, b) => a + b, 0);
-    const leftPx = dividerIdx * DIVIDER_PX - (prevPct / 100) * numDividers * DIVIDER_PX;
+    const numDividers = effectiveSizes.length - 1;
+    // The divider sits between pane dividerIdx and dividerIdx+1, at the right/bottom
+    // edge of pane dividerIdx. That edge = axisOffset of pane (dividerIdx+1) - DIVIDER_PX,
+    // which simplifies to axisOffset(dividerIdx+1) with i*DIVIDER_PX → (dividerIdx)*DIVIDER_PX.
+    const { pct, px } = axisOffset(dividerIdx + 1, effectiveSizes, numDividers);
+    const edgePx = px - DIVIDER_PX; // shift back by divider width to land on the gap
+
+    if (splitViewDirection === "horizontal") {
+      return {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: calcStr(pct, edgePx),
+        height: DIVIDER_PX,
+      };
+    }
     return {
       position: "absolute",
       top: 0,
       bottom: 0,
-      left: leftPx === 0 ? `${prevPct}%` : `calc(${prevPct}% + ${leftPx}px)`,
+      left: calcStr(pct, edgePx),
       width: DIVIDER_PX,
     };
   }
@@ -202,8 +257,9 @@ export default function App() {
               <SessionTabs />
               {/*
                 All session panels live in the same container at all times — moving them
-                to a different parent would remount xterm and kill the connection.
-                In split mode we use absolute positioning to lay them out side by side.
+                to a different parent would remount xterm and kill connections.
+                In split mode we use absolute positioning to lay them out side by side
+                (vertical) or top-to-bottom (horizontal).
               */}
               <div ref={contentRef} className="session-content">
                 {sessions.map((session) => {
@@ -222,11 +278,11 @@ export default function App() {
                   );
                 })}
                 {/* Drag-handle dividers between split panes */}
-                {splitView && splitSizes.length > 1 &&
-                  Array.from({ length: splitSizes.length - 1 }, (_, i) => (
+                {splitView && effectiveSizes.length > 1 &&
+                  Array.from({ length: effectiveSizes.length - 1 }, (_, i) => (
                     <div
                       key={`divider-${i}`}
-                      className="split-divider"
+                      className={`split-divider split-divider--${splitViewDirection}`}
                       style={getDividerStyle(i)}
                       onMouseDown={(e) => handleDividerMouseDown(i, e)}
                     />
