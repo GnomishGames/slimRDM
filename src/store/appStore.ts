@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { Category, Connection, Group, Session, SessionStatus } from "../types";
+import { Category, Connection, Group, Session, SessionStatus, TunnelConfig, TunnelRuntime, TunnelStatus } from "../types";
+import { tunnels as tunnelsApi } from "../utils/tauri";
 import { useSettingsStore } from "./settingsStore";
 
 interface AppState {
@@ -11,6 +12,10 @@ interface AppState {
   sessions: Session[];
   activeSessionId: string | null;
   splitSessionIds: string[];
+
+  // Tunnels
+  tunnelConfigs: TunnelConfig[];
+  tunnelRuntimes: Record<string, TunnelRuntime>;
 
   // UI
   searchQuery: string;
@@ -31,6 +36,15 @@ interface AppState {
   updateCategory: (cat: Category) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
 
+  loadTunnelConfigs: () => Promise<void>;
+  addTunnelConfig: (params: { name: string; jumpHostId: string; remoteHost: string; remotePort: number; localPort: number }) => Promise<TunnelConfig>;
+  editTunnelConfig: (config: { id: string; name: string; jumpHostId: string; remoteHost: string; remotePort: number; localPort: number }) => Promise<void>;
+  deleteTunnelConfig: (id: string) => Promise<void>;
+  connectTunnel: (configId: string) => Promise<void>;
+  disconnectTunnel: (configId: string) => Promise<void>;
+  updateTunnelRuntime: (id: string, patch: Partial<TunnelRuntime>) => void;
+  clearTunnelRuntime: (id: string) => void;
+
   openSession: (connection: Connection) => string;
   closeSession: (sessionId: string) => void;
   setSessionStatus: (sessionId: string, status: SessionStatus, error?: string) => void;
@@ -41,11 +55,27 @@ interface AppState {
   setSelectedGroup: (id: string | null) => void;
 }
 
+function resolveJumpHostParams(conn: Connection, groups: Group[]) {
+  let { username, authType, credentialRef, privateKeyPath } = conn;
+  if (conn.useGroupCredentials && conn.groupId) {
+    const group = groups.find((g) => g.id === conn.groupId);
+    if (group?.username) {
+      username = group.username;
+      authType = group.authType ?? "password";
+      credentialRef = group.credentialRef;
+      privateKeyPath = group.privateKeyPath;
+    }
+  }
+  return { host: conn.host, port: conn.port, username, authType, credentialRef, privateKeyPath };
+}
+
 export const useAppStore = create<AppState>((set) => ({
   connections: [],
   groups: [],
   categories: [],
   sessions: [],
+  tunnelConfigs: [],
+  tunnelRuntimes: {},
   activeSessionId: null,
   splitSessionIds: [],
   searchQuery: "",
@@ -137,6 +167,65 @@ export const useAppStore = create<AppState>((set) => ({
       categories: s.categories.filter((c) => c.id !== id),
       groups: s.groups.map((g) => g.categoryId === id ? { ...g, categoryId: undefined } : g),
     }));
+  },
+
+  loadTunnelConfigs: async () => {
+    const configs = await tunnelsApi.listConfigs();
+    set({ tunnelConfigs: configs });
+  },
+
+  addTunnelConfig: async ({ name, jumpHostId, remoteHost, remotePort, localPort }) => {
+    const displayName = name.trim() || `${remoteHost}:${remotePort}`;
+    const cfg = await tunnelsApi.addConfig({ name: displayName, jumpHostId, remoteHost, remotePort, localPort });
+    set((s) => ({ tunnelConfigs: [...s.tunnelConfigs, cfg] }));
+    return cfg;
+  },
+
+  editTunnelConfig: async (config) => {
+    const updated = await tunnelsApi.updateConfig(config);
+    set((s) => ({ tunnelConfigs: s.tunnelConfigs.map((c) => c.id === updated.id ? updated : c) }));
+  },
+
+  deleteTunnelConfig: async (id) => {
+    await tunnelsApi.deleteConfig(id);
+    set((s) => {
+      const tunnelRuntimes = { ...s.tunnelRuntimes };
+      delete tunnelRuntimes[id];
+      return { tunnelConfigs: s.tunnelConfigs.filter((c) => c.id !== id), tunnelRuntimes };
+    });
+  },
+
+  connectTunnel: async (configId) => {
+    const { tunnelConfigs, connections, groups } = useAppStore.getState();
+    const cfg = tunnelConfigs.find((c) => c.id === configId);
+    if (!cfg) throw new Error("Tunnel config not found");
+    const jumpConn = connections.find((c) => c.id === cfg.jumpHostId);
+    if (!jumpConn) throw new Error("Jump host connection not found");
+    const jumpHostParams = resolveJumpHostParams(jumpConn, groups);
+    set((s) => ({ tunnelRuntimes: { ...s.tunnelRuntimes, [configId]: { status: "connecting" as TunnelStatus } } }));
+    await tunnelsApi.open({ id: configId, name: cfg.name, jumpHostParams, localPort: cfg.localPort, remoteHost: cfg.remoteHost, remotePort: cfg.remotePort });
+  },
+
+  disconnectTunnel: async (id) => {
+    await tunnelsApi.close(id);
+    set((s) => ({ tunnelRuntimes: { ...s.tunnelRuntimes, [id]: { status: "stopped" as TunnelStatus } } }));
+  },
+
+  updateTunnelRuntime: (id, patch) => {
+    set((s) => ({
+      tunnelRuntimes: {
+        ...s.tunnelRuntimes,
+        [id]: { ...s.tunnelRuntimes[id], ...patch },
+      },
+    }));
+  },
+
+  clearTunnelRuntime: (id) => {
+    set((s) => {
+      const tunnelRuntimes = { ...s.tunnelRuntimes };
+      delete tunnelRuntimes[id];
+      return { tunnelRuntimes };
+    });
   },
 
   openSession: (connection) => {

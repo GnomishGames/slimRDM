@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { TunnelConfig } from "../types";
 
 export const ssh = {
   connect: (params: {
@@ -146,6 +147,49 @@ export const credentials = {
 
   delete: (refKey: string) =>
     invoke("delete_credential", { refKey }),
+};
+
+export const tunnels = {
+  // Runtime
+  open: (params: {
+    id: string;
+    name: string;
+    jumpHostParams: {
+      host: string;
+      port: number;
+      username: string;
+      authType: string;
+      credentialRef?: string;
+      privateKeyPath?: string;
+    };
+    localPort: number;
+    remoteHost: string;
+    remotePort: number;
+  }) => invoke("open_tunnel", { params }),
+
+  close: (id: string) => invoke("close_tunnel", { id }),
+
+  // Persisted configs
+  listConfigs: () => invoke<TunnelConfig[]>("list_tunnel_configs"),
+
+  addConfig: (config: {
+    name: string;
+    jumpHostId: string;
+    remoteHost: string;
+    remotePort: number;
+    localPort: number;
+  }) => invoke<TunnelConfig>("add_tunnel_config", { config }),
+
+  updateConfig: (config: {
+    id: string;
+    name: string;
+    jumpHostId: string;
+    remoteHost: string;
+    remotePort: number;
+    localPort: number;
+  }) => invoke<TunnelConfig>("update_tunnel_config", { config }),
+
+  deleteConfig: (id: string) => invoke("delete_tunnel_config", { id }),
 };
 
 export const clipboard = {

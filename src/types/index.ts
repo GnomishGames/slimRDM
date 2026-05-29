@@ -94,6 +94,24 @@ export interface BehaviorSettings {
   splitViewDirection: "vertical" | "horizontal";
 }
 
+export type TunnelStatus = "connecting" | "active" | "stopped" | "error";
+
+export interface TunnelConfig {
+  id: string;
+  name: string;
+  jumpHostId: string;
+  remoteHost: string;
+  remotePort: number;
+  localPort: number;
+  createdAt: number;
+}
+
+export interface TunnelRuntime {
+  status: TunnelStatus;
+  activeLocalPort?: number;
+  error?: string;
+}
+
 export interface NewConnectionForm {
   label: string;
   host: string;

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { SessionTabs } from "./components/session/SessionTabs";
 import { SessionPanel } from "./components/session/SessionPanel";
@@ -39,6 +40,7 @@ export default function App() {
     loadConnections, loadGroups, loadCategories,
     sessions, activeSessionId, splitSessionIds, setSplitSessions,
     setSearchQuery, setActiveSession,
+    updateTunnelRuntime, clearTunnelRuntime, loadTunnelConfigs,
   } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const splitView = useSettingsStore((s) => s.behavior.splitView);
@@ -103,7 +105,26 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    Promise.all([loadConnections(), loadGroups(), loadCategories(), loadSettings()])
+    const unlisten = listen<{ id: string; status: string; localPort?: number; error?: string }>(
+      "tunnel-status",
+      (event) => {
+        const { id, status, localPort, error } = event.payload;
+        if (status === "closed") {
+          clearTunnelRuntime(id);
+        } else if (status === "active") {
+          updateTunnelRuntime(id, { status: "active", activeLocalPort: localPort, error: undefined });
+        } else if (status === "error") {
+          updateTunnelRuntime(id, { status: "error", error });
+        } else {
+          updateTunnelRuntime(id, { status: status as "connecting" });
+        }
+      }
+    );
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
+  useEffect(() => {
+    Promise.all([loadConnections(), loadGroups(), loadCategories(), loadSettings(), loadTunnelConfigs()])
       .then(() => {
         const { connections, openSession } = useAppStore.getState();
         connections
