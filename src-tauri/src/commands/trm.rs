@@ -115,11 +115,14 @@ async fn run_trm_session(
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     if let Some(ref dir) = params.working_directory {
-        let expanded = if dir.starts_with("~/") || dir == "~" {
-            if let Ok(home) = std::env::var("HOME") {
-                dir.replacen("~", &home, 1)
-            } else {
+        let expanded = if dir == "~" || dir.starts_with("~/") || dir.starts_with("~\\") {
+            let home = std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .unwrap_or_default();
+            if home.is_empty() {
                 dir.clone()
+            } else {
+                dir.replacen("~", &home, 1)
             }
         } else {
             dir.clone()
