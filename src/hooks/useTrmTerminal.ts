@@ -119,6 +119,7 @@ export function useTrmTerminal({ sessionId, connection, containerRef }: UseTrmTe
         sessionId,
         workingDirectory: connection.workingDirectory,
         shellPath: connection.shellPath,
+        startupCommands: connection.startupCommands,
         initialCols: term?.cols,
         initialRows: term?.rows,
       });

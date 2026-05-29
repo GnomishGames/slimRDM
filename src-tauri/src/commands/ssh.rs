@@ -40,6 +40,7 @@ pub struct SshConnectParams {
     pub connect_timeout: Option<u32>,    // seconds; None = no timeout
     pub initial_cols: Option<u16>,
     pub initial_rows: Option<u16>,
+    pub startup_commands: Option<String>,
     pub jump_host_params: Option<JumpHostParams>,
 }
 
@@ -277,6 +278,21 @@ async fn run_ssh_session(
         status: "connected".into(),
         message: None,
     });
+
+    // Send startup commands after a brief delay to let the shell initialize.
+    // Use \r alone (not \r\n) — that is the exact byte xterm.js sends for Enter,
+    // and it is what the remote PTY line discipline expects to trigger execution.
+    if let Some(ref cmds) = params.startup_commands {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        for cmd in cmds.lines() {
+            let cmd = cmd.trim();
+            if !cmd.is_empty() {
+                channel.data(format!("{}\r", cmd).as_bytes())
+                    .await
+                    .map_err(|e| format!("Startup command failed: {}", e))?;
+            }
+        }
+    }
 
     // Process input from frontend, break on server EOF or explicit disconnect
     loop {

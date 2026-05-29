@@ -15,6 +15,7 @@ export const ssh = {
     connectTimeout?: number;
     initialCols?: number;
     initialRows?: number;
+    startupCommands?: string;
     jumpHostParams?: {
       host: string;
       port: number;
@@ -89,6 +90,7 @@ export const trm = {
     sessionId: string;
     workingDirectory?: string;
     shellPath?: string;
+    startupCommands?: string;
     initialCols?: number;
     initialRows?: number;
   }) => invoke("trm_connect", { params }),

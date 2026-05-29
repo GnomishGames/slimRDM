@@ -31,6 +31,7 @@ export interface Connection {
   jumpHostId?: string;
   workingDirectory?: string;
   shellPath?: string;
+  startupCommands?: string;
 }
 
 export interface Category {
@@ -104,4 +105,5 @@ export interface NewConnectionForm {
   tags: string[];
   workingDirectory?: string;
   shellPath?: string;
+  startupCommands?: string;
 }
