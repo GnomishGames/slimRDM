@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.5.0] - 2026-05-29
+
+### Added
+- **SSH tunnel manager** — save and manage SSH tunnels from the sidebar. Each tunnel is configured with an SSH connection (the server to tunnel through), a local port (where you connect on your machine), and a forwarding destination (host:port reachable from the SSH server — use `localhost` for services on the server itself). Tunnels persist across restarts; connect and disconnect them independently without recreating them each session. Right-click a tunnel for Connect / Edit / Delete; the context menu opens upward so it stays on screen.
+
+---
+
+## [1.4.0] - 2026-05-29
+
+### Added
+- **Auto-connect** — connections can be flagged to open automatically on launch via a checkbox in the connection modal.
+- **Split view** — display up to 3 terminal sessions side by side. Supports vertical (default) and horizontal split directions, configurable in Settings. Panes are resizable by dragging the divider.
+
+### Fixed
+- TRM working directory: `~` in the path is now correctly expanded on Windows.
+- Split view 3-pane layout bug resolved.
+- xterm.js canvas artifacts after fit/resize eliminated.
+
+---
+
 ## [1.3.2] - 2026-05-22
 
 ### Fixed
