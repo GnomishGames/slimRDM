@@ -10,12 +10,28 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import "./styles.css";
 
 export default function App() {
-  const { loadConnections, loadGroups, loadCategories, sessions, activeSessionId, setSearchQuery } = useAppStore();
+  const { loadConnections, loadGroups, loadCategories, sessions, activeSessionId, setSearchQuery, setActiveSession } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateDownloading, setUpdateDownloading] = useState(false);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || sessions.length < 2) return;
+      if (e.key !== "PageDown" && e.key !== "PageUp") return;
+      e.preventDefault();
+      const idx = sessions.findIndex((s) => s.id === activeSessionId);
+      if (idx === -1) return;
+      const next = e.key === "PageDown"
+        ? (idx + 1) % sessions.length
+        : (idx - 1 + sessions.length) % sessions.length;
+      setActiveSession(sessions[next].id);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sessions, activeSessionId]);
 
   useEffect(() => {
     loadConnections();
