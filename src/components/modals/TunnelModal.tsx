@@ -16,9 +16,9 @@ export function TunnelModal({ editing, onClose }: Props) {
 
   const [name, setName] = useState(editing?.name ?? "");
   const [jumpHostId, setJumpHostId] = useState(editing?.jumpHostId ?? sshConnections[0]?.id ?? "");
-  const [remoteHost, setRemoteHost] = useState(editing?.remoteHost ?? "");
-  const [remotePort, setRemotePort] = useState(String(editing?.remotePort ?? 22));
   const [localPort, setLocalPort] = useState(editing?.localPort ? String(editing.localPort) : "");
+  const [remoteHost, setRemoteHost] = useState(editing?.remoteHost ?? "");
+  const [remotePort, setRemotePort] = useState(String(editing?.remotePort ?? 80));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -27,30 +27,31 @@ export function TunnelModal({ editing, onClose }: Props) {
     const errs: Record<string, string> = {};
     if (!jumpHostId) errs.jumpHostId = "Required";
     if (!remoteHost.trim()) errs.remoteHost = "Required";
-    const port = parseInt(remotePort, 10);
-    if (!port || port < 1 || port > 65535) errs.remotePort = "1–65535";
+    const rport = parseInt(remotePort, 10);
+    if (!rport || rport < 1 || rport > 65535) errs.remotePort = "1–65535";
     const lport = localPort.trim() ? parseInt(localPort, 10) : 0;
     if (localPort.trim() && (isNaN(lport) || lport < 1 || lport > 65535)) errs.localPort = "1–65535";
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
 
+    const displayName = name.trim() || `${remoteHost.trim()}:${rport}`;
     setSaving(true);
     try {
       if (editing) {
         await editTunnelConfig({
           id: editing.id,
-          name: name.trim() || `${remoteHost.trim()}:${port}`,
+          name: displayName,
           jumpHostId,
           remoteHost: remoteHost.trim(),
-          remotePort: port,
+          remotePort: rport,
           localPort: lport,
         });
       } else {
         await addTunnelConfig({
-          name: name.trim(),
+          name: displayName,
           jumpHostId,
           remoteHost: remoteHost.trim(),
-          remotePort: port,
+          remotePort: rport,
           localPort: lport,
         });
       }
@@ -74,21 +75,24 @@ export function TunnelModal({ editing, onClose }: Props) {
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
+
             <div className="field-row">
               <label className="field-label">Name <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(optional)</span></label>
               <input
                 className="field-input"
-                placeholder="e.g. DB tunnel"
+                placeholder="e.g. Web tunnel"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
 
+            {/* Step 1: which server to SSH into */}
             <div className="field-row">
               <label className="field-label">
-                Jump host (SSH connection)
+                SSH connection
                 {errors.jumpHostId && <span className="field-error"> — {errors.jumpHostId}</span>}
               </label>
+              <p className="field-hint">The remote server traffic tunnels through (port 22)</p>
               {sshConnections.length === 0 ? (
                 <p style={{ fontSize: 12, color: "var(--text-muted)" }}>No SSH connections — add one first.</p>
               ) : (
@@ -106,47 +110,53 @@ export function TunnelModal({ editing, onClose }: Props) {
               )}
             </div>
 
-            <div className="field-row-group">
-              <div className="field-row field-row--grow">
-                <label className="field-label">
-                  Remote host
-                  {errors.remoteHost && <span className="field-error"> — {errors.remoteHost}</span>}
-                </label>
+            {/* Step 2: local port on the user's machine */}
+            <div className="field-row">
+              <label className="field-label">
+                Local port (source)
+                {errors.localPort && <span className="field-error"> — {errors.localPort}</span>}
+              </label>
+              <p className="field-hint">Port on your machine — what you connect to locally</p>
+              <div className="tunnel-localhost-row">
+                <span className="tunnel-localhost-prefix">localhost:</span>
+                <input
+                  className={`field-input${errors.localPort ? " field-input--error" : ""}`}
+                  type="number"
+                  min={1}
+                  max={65535}
+                  placeholder="auto"
+                  value={localPort}
+                  onChange={(e) => setLocalPort(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Step 3: where traffic goes on the remote side */}
+            <div className="field-row">
+              <label className="field-label">
+                Forward to (destination)
+                {errors.remoteHost && <span className="field-error"> — {errors.remoteHost}</span>}
+                {errors.remotePort && <span className="field-error"> — port {errors.remotePort}</span>}
+              </label>
+              <p className="field-hint">Host reachable from the SSH server — use localhost for services on it</p>
+              <div className="field-row-group">
                 <input
                   className={`field-input${errors.remoteHost ? " field-input--error" : ""}`}
-                  placeholder="192.168.1.10"
+                  placeholder="localhost or host/IP"
                   value={remoteHost}
                   onChange={(e) => setRemoteHost(e.target.value)}
                 />
-              </div>
-              <div className="field-row" style={{ width: 80, flexShrink: 0 }}>
-                <label className="field-label">
-                  Port{errors.remotePort && <span className="field-error"> !</span>}
-                </label>
                 <input
                   className={`field-input${errors.remotePort ? " field-input--error" : ""}`}
                   type="number"
                   min={1}
                   max={65535}
+                  placeholder="Port"
                   value={remotePort}
+                  style={{ width: 80, flexShrink: 0 }}
                   onChange={(e) => setRemotePort(e.target.value)}
                 />
               </div>
-            </div>
-
-            <div className="field-row" style={{ width: 120 }}>
-              <label className="field-label">
-                Local port{errors.localPort && <span className="field-error"> — {errors.localPort}</span>}
-              </label>
-              <input
-                className={`field-input${errors.localPort ? " field-input--error" : ""}`}
-                type="number"
-                min={1}
-                max={65535}
-                placeholder="auto"
-                value={localPort}
-                onChange={(e) => setLocalPort(e.target.value)}
-              />
             </div>
 
             {errors.submit && (

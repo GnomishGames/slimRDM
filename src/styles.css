@@ -384,6 +384,30 @@ html, body, #root {
 }
 
 /* ── Tunnel List ──────────────────────────────────────── */
+.tunnel-localhost-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.tunnel-localhost-prefix {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tunnel-localhost-row .field-input {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  width: 100px;
+}
+
 .tunnel-section {
   border-bottom: 1px solid var(--border);
 }
@@ -541,6 +565,7 @@ html, body, #root {
 
 .context-menu button:hover { background: var(--bg-hover); }
 .context-menu button.danger { color: var(--red); }
+.context-menu--up { top: auto; bottom: 100%; }
 
 /* ── Tab Bar ─────────────────────────────────────────── */
 .tab-bar {
@@ -876,6 +901,13 @@ kbd {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.field-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+  line-height: 1.4;
 }
 
 .field-error {

@@ -113,7 +113,7 @@ function TunnelItem({
           )}
         </div>
         {showMenu && (
-          <div className="context-menu" onMouseDown={(e) => e.preventDefault()}>
+          <div className="context-menu context-menu--up" onMouseDown={(e) => e.preventDefault()}>
             {isRunning
               ? <button onClick={() => { onDisconnect(); setShowMenu(false); }}>Disconnect</button>
               : <button onClick={() => { onConnect(); setShowMenu(false); }}>Connect</button>
