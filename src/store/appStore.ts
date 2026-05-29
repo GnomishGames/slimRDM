@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { Category, Connection, Group, Session, SessionStatus } from "../types";
+import { useSettingsStore } from "./settingsStore";
 
 interface AppState {
   // Data
@@ -9,6 +10,7 @@ interface AppState {
   categories: Category[];
   sessions: Session[];
   activeSessionId: string | null;
+  splitSessionIds: string[];
 
   // UI
   searchQuery: string;
@@ -33,6 +35,7 @@ interface AppState {
   closeSession: (sessionId: string) => void;
   setSessionStatus: (sessionId: string, status: SessionStatus, error?: string) => void;
   setActiveSession: (sessionId: string | null) => void;
+  setSplitSessions: (ids: string[]) => void;
 
   setSearchQuery: (q: string) => void;
   setSelectedGroup: (id: string | null) => void;
@@ -44,6 +47,7 @@ export const useAppStore = create<AppState>((set) => ({
   categories: [],
   sessions: [],
   activeSessionId: null,
+  splitSessionIds: [],
   searchQuery: "",
   selectedGroupId: null,
   sidebarWidth: 260,
@@ -144,10 +148,14 @@ export const useAppStore = create<AppState>((set) => ({
       status: "connecting",
       openedAt: Date.now(),
     };
-    set((s) => ({
-      sessions: [...s.sessions, session],
-      activeSessionId: sessionId,
-    }));
+    set((s) => {
+      const { behavior } = useSettingsStore.getState();
+      const splitSessionIds =
+        behavior.splitView && s.splitSessionIds.length < 3
+          ? [...s.splitSessionIds, sessionId]
+          : s.splitSessionIds;
+      return { sessions: [...s.sessions, session], activeSessionId: sessionId, splitSessionIds };
+    });
     return sessionId;
   },
 
@@ -158,7 +166,8 @@ export const useAppStore = create<AppState>((set) => ({
         s.activeSessionId === sessionId
           ? sessions[sessions.length - 1]?.id ?? null
           : s.activeSessionId;
-      return { sessions, activeSessionId };
+      const splitSessionIds = s.splitSessionIds.filter((id) => id !== sessionId);
+      return { sessions, activeSessionId, splitSessionIds };
     });
   },
 
@@ -170,7 +179,31 @@ export const useAppStore = create<AppState>((set) => ({
     }));
   },
 
-  setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
+  setActiveSession: (sessionId) => {
+    set((s) => {
+      if (sessionId === null) return { activeSessionId: null };
+      const { behavior } = useSettingsStore.getState();
+      if (!behavior.splitView) return { activeSessionId: sessionId };
+
+      const { splitSessionIds } = s;
+      if (splitSessionIds.includes(sessionId)) {
+        // Already visible in split — just focus it
+        return { activeSessionId: sessionId };
+      }
+      if (splitSessionIds.length < 3) {
+        // Room for one more pane
+        return { activeSessionId: sessionId, splitSessionIds: [...splitSessionIds, sessionId] };
+      }
+      // Replace the currently focused pane
+      const activeIdx = splitSessionIds.indexOf(s.activeSessionId ?? "");
+      const newSplit = [...splitSessionIds];
+      newSplit[activeIdx >= 0 ? activeIdx : splitSessionIds.length - 1] = sessionId;
+      return { activeSessionId: sessionId, splitSessionIds: newSplit };
+    });
+  },
+
+  setSplitSessions: (ids) => set({ splitSessionIds: ids }),
+
   setSearchQuery: (q) => set({ searchQuery: q }),
   setSelectedGroup: (id) => set({ selectedGroupId: id }),
 }));

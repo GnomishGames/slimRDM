@@ -162,7 +162,10 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
       }),
     ];
 
-    const resizeObserver = new ResizeObserver(() => fitAddon.fit());
+    const resizeObserver = new ResizeObserver(() => {
+      fitAddon.fit();
+      term.refresh(0, term.rows - 1);
+    });
     resizeObserver.observe(containerRef.current);
 
     return () => {
@@ -227,7 +230,10 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
     }
   }, [sessionId, connection]);
 
-  const fit = () => fitAddonRef.current?.fit();
+  const fit = () => {
+    fitAddonRef.current?.fit();
+    if (termRef.current) termRef.current.refresh(0, termRef.current.rows - 1);
+  };
 
   return { connect, term: termRef, fit };
 }
