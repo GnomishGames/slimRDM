@@ -383,6 +383,128 @@ html, body, #root {
   font-size: 12px;
 }
 
+/* ── Tunnel List ──────────────────────────────────────── */
+.tunnel-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.tunnel-section-header {
+  display: flex;
+  align-items: center;
+  padding: 0 6px 0 4px;
+  gap: 2px;
+}
+
+.tunnel-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 4px;
+  text-align: left;
+}
+
+.tunnel-section-toggle:hover { color: var(--text-secondary); }
+
+.tunnel-count {
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  padding: 0 5px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tunnel-add-btn {
+  opacity: 0.5;
+}
+.tunnel-add-btn:hover { opacity: 1; }
+
+.tunnel-list {
+  padding: 2px 0 4px;
+}
+
+.tunnel-empty {
+  padding: 4px 14px 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tunnel-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 14px;
+}
+
+.tunnel-item:hover { background: var(--bg-hover); }
+
+.tunnel-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tunnel-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.tunnel-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tunnel-addr {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tunnel-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.tunnel-item:hover .tunnel-actions,
+.tunnel-item--menu-open .tunnel-actions { opacity: 1; }
+
+.tunnel-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.tunnel-action-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
+
 .sidebar-footer {
   padding: 8px 12px;
   border-top: 1px solid var(--border);

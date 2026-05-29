@@ -83,6 +83,39 @@ pub struct Group {
     pub category_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelConfig {
+    pub id: String,
+    pub name: String,
+    pub jump_host_id: String,
+    pub remote_host: String,
+    pub remote_port: u16,
+    pub local_port: u16,
+    pub created_at: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewTunnelConfig {
+    pub name: String,
+    pub jump_host_id: String,
+    pub remote_host: String,
+    pub remote_port: u16,
+    pub local_port: u16,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateTunnelConfig {
+    pub id: String,
+    pub name: String,
+    pub jump_host_id: String,
+    pub remote_host: String,
+    pub remote_port: u16,
+    pub local_port: u16,
+}
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppStore {
@@ -90,6 +123,8 @@ pub struct AppStore {
     pub groups: Vec<Group>,
     #[serde(default)]
     pub categories: Vec<Category>,
+    #[serde(default)]
+    pub tunnel_configs: Vec<TunnelConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

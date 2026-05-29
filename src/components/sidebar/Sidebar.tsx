@@ -5,6 +5,7 @@ import { Category, Connection, Group } from "../../types";
 import { AddConnectionModal } from "../modals/AddConnectionModal";
 import { EditGroupModal } from "../modals/EditGroupModal";
 import { SettingsModal } from "../modals/SettingsModal";
+import { TunnelList } from "./TunnelList";
 import { credentials } from "../../utils/tauri";
 import clsx from "clsx";
 
@@ -269,6 +270,8 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
             </div>
           )}
         </div>
+
+        <TunnelList />
 
         <div className="sidebar-footer">
           <button className="icon-btn" title="Settings" onClick={() => setShowSettings(true)}>

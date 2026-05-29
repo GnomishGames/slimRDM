@@ -65,6 +65,15 @@ pub fn run() {
             // Data
             commands::data::export_data,
             commands::data::import_data,
+            // Tunnels (runtime)
+            commands::tunnels::open_tunnel,
+            commands::tunnels::list_tunnels,
+            commands::tunnels::close_tunnel,
+            // Tunnel configs (persisted)
+            commands::tunnels::list_tunnel_configs,
+            commands::tunnels::add_tunnel_config,
+            commands::tunnels::update_tunnel_config,
+            commands::tunnels::delete_tunnel_config,
             // Updates
             commands::updates::check_for_updates,
             commands::updates::download_and_install_update,

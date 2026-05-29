@@ -9,4 +9,5 @@ pub mod rdp;
 pub mod ssh;
 pub mod trm;
 pub mod tunnel_utils;
+pub mod tunnels;
 pub mod updates;
