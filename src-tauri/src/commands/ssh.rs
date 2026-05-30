@@ -231,9 +231,43 @@ async fn run_ssh_session(
             let pw = params.credential_ref.as_deref()
                 .and_then(crate::commands::credentials::get_credential_sync)
                 .unwrap_or_default();
-            session.authenticate_password(&params.username, &pw)
+
+            // Use keyboard-interactive first. russh's authenticate_password hangs on Ubuntu
+            // because sshd (with PAM + KbdInteractiveAuthentication) responds with
+            // SSH_MSG_USERAUTH_INFO_REQUEST instead of immediate success/failure, and
+            // russh's wait_recv_reply silently drops InfoRequest replies and loops forever.
+            // If the server rejects KI outright (Debian with KbdInteractiveAuthentication no),
+            // we fall back to direct password auth.
+            let mut ki = session
+                .authenticate_keyboard_interactive_start(&params.username, None)
                 .await
-                .map_err(|e| format!("Auth failed: {}", e))?
+                .map_err(|e| format!("Auth failed: {}", e))?;
+
+            loop {
+                match ki {
+                    client::KeyboardInteractiveAuthResponse::Success => break true,
+                    client::KeyboardInteractiveAuthResponse::Failure => {
+                        break session
+                            .authenticate_password(&params.username, &pw)
+                            .await
+                            .map_err(|e| format!("Auth failed: {}", e))?;
+                    }
+                    client::KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
+                        // Supply the password for the first prompt (PAM "Password:" challenge).
+                        // Any extra prompts (e.g. 2FA) get an empty string; the user types those
+                        // in the terminal if the server sends a second InfoRequest.
+                        let responses: Vec<String> = prompts
+                            .iter()
+                            .enumerate()
+                            .map(|(i, _)| if i == 0 { pw.clone() } else { String::new() })
+                            .collect();
+                        ki = session
+                            .authenticate_keyboard_interactive_respond(responses)
+                            .await
+                            .map_err(|e| format!("Auth failed: {}", e))?;
+                    }
+                }
+            }
         }
         AuthType::PublicKey => {
             let key_path = params.private_key_path.as_deref()
@@ -255,12 +289,12 @@ async fn run_ssh_session(
     }
 
     // Open a PTY channel
-    let channel = session.channel_open_session()
+    let mut channel = session.channel_open_session()
         .await
         .map_err(|e| format!("Channel open failed: {}", e))?;
 
     channel.request_pty(
-        false,
+        true,
         "xterm-256color",
         params.initial_cols.unwrap_or(80) as u32,
         params.initial_rows.unwrap_or(24) as u32,
@@ -268,9 +302,27 @@ async fn run_ssh_session(
         &[],
     ).await.map_err(|e| format!("PTY request failed: {}", e))?;
 
-    channel.request_shell(false)
+    loop {
+        match channel.wait().await {
+            Some(ChannelMsg::Success) => break,
+            Some(ChannelMsg::Failure) => return Err("Server refused PTY allocation".into()),
+            None => return Err("Channel closed during PTY setup".into()),
+            _ => {}
+        }
+    }
+
+    channel.request_shell(true)
         .await
         .map_err(|e| format!("Shell request failed: {}", e))?;
+
+    loop {
+        match channel.wait().await {
+            Some(ChannelMsg::Success) => break,
+            Some(ChannelMsg::Failure) => return Err("Server refused shell request".into()),
+            None => return Err("Channel closed during shell setup".into()),
+            _ => {}
+        }
+    }
 
     // Emit connected
     let _ = app.emit("ssh-status", SshStatusEvent {
