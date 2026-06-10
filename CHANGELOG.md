@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.5.2] - 2026-06-10
+
+### Fixed
+- **SSH — Cisco switch support** — connections to devices advertising `SSH-1.99` (Cisco CBS350 and similar) now succeed. russh was discarding the `SSH-1.99` version string as a banner line and waiting for `SSH-2.0-`, causing every connection to hang until the 15-second timeout. Patched vendor copy of russh to accept `SSH-1.99` as a valid SSH-2 identifier per RFC 4253 §4.2.
+- **SSH — legacy algorithm negotiation** — added `diffie-hellman-group14-sha1`, `diffie-hellman-group1-sha1`, AES-CBC ciphers, and `ssh-rsa` host keys to the preferred algorithm list so older network devices can complete key exchange. Modern servers still negotiate the strongest available algorithm.
+- **RDP — font smoothing never applied** — `build_performance_flags` accepted the `disableFontSmoothing` field but never acted on it; `ENABLE_FONT_SMOOTHING` was never sent to the server regardless of the setting. Fixed, and changed the default to have font smoothing **enabled** (ClearType on the remote desktop).
+- **RDP — pixelated rendering on HiDPI displays** — RDP session resolution is now requested at physical pixels (`clientWidth × devicePixelRatio`) instead of CSS pixels. The canvas is pinned to its CSS-pixel display size so the browser does not upscale it. Improves sharpness on displays running at fractional or 2× scaling.
+- **UI — port not updating when switching connection type in edit modal** — changing SSH → RDP (or any type) in an existing connection now auto-fills the default port for the new type, matching the behaviour in the new-connection modal. Custom ports are preserved if they differ from the previous type's default.
+
+---
+
+## [1.5.1] - 2026-06-02
+
+### Fixed
+- **SSH — hang on Ubuntu hosts** — connections to Ubuntu servers with PAM keyboard-interactive auth now complete without hanging. russh's `authenticate_password` silently dropped `SSH_MSG_USERAUTH_INFO_REQUEST` replies and looped forever; switched to `authenticate_keyboard_interactive` with a password fallback.
+
+---
+
 ## [1.5.0] - 2026-05-29
 
 ### Added
