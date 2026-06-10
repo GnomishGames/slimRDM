@@ -7,6 +7,10 @@ use tauri::Manager;
 fn init_logger(data_dir: std::path::PathBuf) {
     use std::fs::OpenOptions;
     let log_path = data_dir.join("slimrdm.log");
+    // Rotate at startup if the log exceeds 5 MB so it doesn't grow unbounded.
+    if std::fs::metadata(&log_path).map(|m| m.len()).unwrap_or(0) > 5_000_000 {
+        let _ = std::fs::rename(&log_path, data_dir.join("slimrdm.log.1"));
+    }
     if let Ok(file) = OpenOptions::new().create(true).append(true).open(&log_path) {
         env_logger::Builder::new()
             .filter_level(log::LevelFilter::Off)

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.4] - 2026-06-10
+
+### Fixed
+- **SSH — devices requiring "none" auth** — SSH connections to devices that accept the SSH `none` authentication method (e.g. some switches where the account has no local password) now connect automatically. Previously, slimRDM skipped the `none` probe and went straight to password/keyboard-interactive, both of which those devices reject.
+
+### Added
+- **Startup commands — credential tokens** — `{username}` and `{password}` in startup commands are now replaced with the connection's stored credentials at connect time. Useful for devices that authenticate at the SSH transport level with `none` but then present a shell-level login prompt (common on some network appliances). Set startup commands to `{username}` and `{password}` on separate lines to auto-fill the prompt.
+- **Log rotation** — `slimrdm.log` rotates to `.log.1` at startup if it exceeds 5 MB; `ssh.log` rotates mid-run at 1 MB. At most two files of each type are kept.
+
+---
+
 ## [1.5.3] - 2026-06-10
 
 ### Fixed

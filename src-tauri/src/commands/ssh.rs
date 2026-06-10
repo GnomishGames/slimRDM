@@ -276,45 +276,68 @@ async fn run_ssh_session(
     }
     let mut session = connect_result?;
 
+    // Fetch stored password upfront — needed for both auth and startup command tokens.
+    let stored_pw = match &params.auth_type {
+        AuthType::Password => params.credential_ref.as_deref()
+            .and_then(crate::commands::credentials::get_credential_sync)
+            .unwrap_or_default(),
+        _ => String::new(),
+    };
+
     // Authenticate
     let authenticated = match &params.auth_type {
         AuthType::Password => {
-            let pw = params.credential_ref.as_deref()
-                .and_then(crate::commands::credentials::get_credential_sync)
-                .unwrap_or_default();
+            let pw = &stored_pw;
 
-            // Try password auth first. Cisco switches (and most devices) handle this
-            // directly. For Ubuntu+PAM servers that respond with INFO_REQUEST instead
-            // of SUCCESS/FAILURE, russh now responds to the prompt inline using the
-            // stored password (patched in vendor/russh/src/client/encrypted.rs).
-            // If the server rejects password outright, fall back to keyboard-interactive
-            // (covers servers that only advertise keyboard-interactive method).
-            let pw_result = session
-                .authenticate_password(&params.username, &pw)
+            ssh_log(&format!(
+                "credential_ref={:?} found={} pw_len={}",
+                params.credential_ref.as_deref().unwrap_or("(none)"),
+                !pw.is_empty(),
+                pw.len()
+            ));
+
+            // Step 1: try "none" auth. OpenSSH always does this first; some devices
+            // (e.g. switches with no local password configured) accept it outright.
+            let none_result = session
+                .authenticate_none(&params.username)
                 .await
                 .map_err(|e| format!("Auth failed: {}", e))?;
-
-            if pw_result {
+            if none_result {
+                ssh_log("Auth succeeded via none");
                 true
             } else {
-                let mut ki = session
-                    .authenticate_keyboard_interactive_start(&params.username, None)
+                // Step 2: password auth. For Ubuntu+PAM servers that respond with
+                // INFO_REQUEST instead of SUCCESS/FAILURE, russh responds to the
+                // prompt inline using the stored password (see vendor/russh patch).
+                let pw_result = session
+                    .authenticate_password(&params.username, pw.as_str())
                     .await
                     .map_err(|e| format!("Auth failed: {}", e))?;
-                loop {
-                    match ki {
-                        client::KeyboardInteractiveAuthResponse::Success => break true,
-                        client::KeyboardInteractiveAuthResponse::Failure => break false,
-                        client::KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
-                            let responses: Vec<String> = prompts
-                                .iter()
-                                .enumerate()
-                                .map(|(i, _)| if i == 0 { pw.clone() } else { String::new() })
-                                .collect();
-                            ki = session
-                                .authenticate_keyboard_interactive_respond(responses)
-                                .await
-                                .map_err(|e| format!("Auth failed: {}", e))?;
+
+                if pw_result {
+                    true
+                } else {
+                    // Step 3: keyboard-interactive fallback for servers that only
+                    // advertise keyboard-interactive (not password) method.
+                    let mut ki = session
+                        .authenticate_keyboard_interactive_start(&params.username, None)
+                        .await
+                        .map_err(|e| format!("Auth failed: {}", e))?;
+                    loop {
+                        match ki {
+                            client::KeyboardInteractiveAuthResponse::Success => break true,
+                            client::KeyboardInteractiveAuthResponse::Failure => break false,
+                            client::KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
+                                let responses: Vec<String> = prompts
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, _)| if i == 0 { pw.to_string() } else { String::new() })
+                                    .collect();
+                                ki = session
+                                    .authenticate_keyboard_interactive_respond(responses)
+                                    .await
+                                    .map_err(|e| format!("Auth failed: {}", e))?;
+                            }
                         }
                     }
                 }
@@ -388,14 +411,21 @@ async fn run_ssh_session(
     // Send startup commands after a brief delay to let the shell initialize.
     // Use \r alone (not \r\n) — that is the exact byte xterm.js sends for Enter,
     // and it is what the remote PTY line discipline expects to trigger execution.
+    // Supports {username} and {password} tokens, replaced with the stored credentials.
+    // Useful for devices that require a second shell-level login after SSH auth (e.g.
+    // switches that accept "none" SSH auth then prompt for credentials in the CLI).
     if let Some(ref cmds) = params.startup_commands {
-        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         for cmd in cmds.lines() {
-            let cmd = cmd.trim();
+            let cmd = cmd.trim()
+                .replace("{username}", &params.username)
+                .replace("{password}", &stored_pw);
             if !cmd.is_empty() {
                 channel.data(format!("{}\r", cmd).as_bytes())
                     .await
                     .map_err(|e| format!("Startup command failed: {}", e))?;
+                // Small gap between lines so the remote shell can process each entry.
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
         }
     }
@@ -463,9 +493,12 @@ fn ssh_log(msg: &str) {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    // ISO-ish timestamp from epoch seconds
     let path = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
     let log = format!("{path}/.local/share/slimrdm/ssh.log");
+    // Rotate at 1 MB so the log doesn't grow unbounded.
+    if std::fs::metadata(&log).map(|m| m.len()).unwrap_or(0) > 1_000_000 {
+        let _ = std::fs::rename(&log, format!("{log}.1"));
+    }
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log) {
         let _ = writeln!(f, "[{ts}] {msg}");
     }
