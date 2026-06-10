@@ -1,6 +1,6 @@
 [package]
 name = "slimrdm"
-  version = "1.5.1"
+  version = "1.5.2"
 description = "SlimRDM - Lightweight RDP & SSH Client"
 authors = ["SlimRDM"]
 license = "MIT"
@@ -42,6 +42,10 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "nat
 russh = "0.44"
 russh-keys = "0.44"
 
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
 # RDP
 ironrdp = { version = "0.14", features = ["connector", "session", "graphics", "pdu", "cliprdr", "core"] }
 ironrdp-cliprdr = "0.5"
@@ -57,6 +61,9 @@ portable-pty = "0.8"
 [features]
 default = ["ssh"]
 ssh = []
+
+[patch.crates-io]
+russh = { path = "vendor/russh" }
 
 [profile.release]
 panic = "abort"

@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
@@ -119,10 +121,49 @@ async fn run_ssh_session(
         .filter(|&s| s > 0)
         .map(|s| std::time::Duration::from_secs(s.into()));
 
+    // Extend the default preferred algorithms to include legacy options required by
+    // Cisco switches (CBS350 etc.) which only offer diffie-hellman-group14-sha1,
+    // aes128-cbc ciphers, and ssh-rsa host keys. Modern servers still negotiate
+    // the strongest mutually-supported algorithm, so adding these is safe.
+    let preferred = Preferred {
+        kex: Cow::Owned(vec![
+            kex::CURVE25519,
+            kex::CURVE25519_PRE_RFC_8731,
+            kex::DH_G16_SHA512,
+            kex::DH_G14_SHA256,
+            kex::EXTENSION_SUPPORT_AS_CLIENT,
+            kex::EXTENSION_SUPPORT_AS_SERVER,
+            kex::EXTENSION_OPENSSH_STRICT_KEX_AS_CLIENT,
+            kex::EXTENSION_OPENSSH_STRICT_KEX_AS_SERVER,
+            kex::DH_G14_SHA1,
+            kex::DH_G1_SHA1,
+        ]),
+        key: Cow::Owned(vec![
+            key::ED25519,
+            key::ECDSA_SHA2_NISTP256,
+            key::ECDSA_SHA2_NISTP521,
+            key::RSA_SHA2_256,
+            key::RSA_SHA2_512,
+            key::SSH_RSA,
+        ]),
+        cipher: Cow::Owned(vec![
+            cipher::CHACHA20_POLY1305,
+            cipher::AES_256_GCM,
+            cipher::AES_256_CTR,
+            cipher::AES_192_CTR,
+            cipher::AES_128_CTR,
+            cipher::AES_256_CBC,
+            cipher::AES_192_CBC,
+            cipher::AES_128_CBC,
+        ]),
+        ..Preferred::DEFAULT
+    };
+
     let config = Arc::new(client::Config {
         inactivity_timeout: Some(std::time::Duration::from_secs(3600)),
         keepalive_interval: keepalive,
         keepalive_max: 3,
+        preferred,
         ..<_>::default()
     });
 
@@ -191,7 +232,12 @@ async fn run_ssh_session(
         close_tx,
     };
 
-    let mut session = if let Some(ref jump) = params.jump_host_params {
+    ssh_log(&format!(
+        "Connecting to {}:{} user={} auth={:?} timeout={:?}s",
+        params.host, params.port, params.username, params.auth_type, params.connect_timeout
+    ));
+
+    let connect_result = if let Some(ref jump) = params.jump_host_params {
         let stream = open_jump_channel(jump, &params.host, params.port)
             .await
             .map_err(|e| format!("Jump host error: {e}"))?;
@@ -202,11 +248,11 @@ async fn run_ssh_session(
             )
             .await
             .map_err(|_| format!("Connection timed out after {}s", secs))?
-            .map_err(|e| format!("Connection failed: {}", e))?
+            .map_err(|e| format!("Connection failed: {e}"))
         } else {
             client::connect_stream(config, stream, handler)
                 .await
-                .map_err(|e| format!("Connection failed: {}", e))?
+                .map_err(|e| format!("Connection failed: {e}"))
         }
     } else {
         let addr = format!("{}:{}", params.host, params.port);
@@ -217,13 +263,18 @@ async fn run_ssh_session(
             )
             .await
             .map_err(|_| format!("Connection timed out after {}s", secs))?
-            .map_err(|e| format!("Connection failed: {}", e))?
+            .map_err(|e| format!("Connection failed: {e}"))
         } else {
             client::connect(config, addr, handler)
                 .await
-                .map_err(|e| format!("Connection failed: {}", e))?
+                .map_err(|e| format!("Connection failed: {e}"))
         }
     };
+
+    if let Err(ref e) = connect_result {
+        ssh_log(&format!("Connect error for {}:{} — {}", params.host, params.port, e));
+    }
+    let mut session = connect_result?;
 
     // Authenticate
     let authenticated = match &params.auth_type {
@@ -285,8 +336,11 @@ async fn run_ssh_session(
     };
 
     if !authenticated {
+        ssh_log(&format!("Auth rejected for {}:{} user={}", params.host, params.port, params.username));
         return Err("Authentication rejected by server".into());
     }
+
+    ssh_log(&format!("Authenticated OK for {}:{} user={}", params.host, params.port, params.username));
 
     // Open a PTY channel
     let mut channel = session.channel_open_session()
@@ -401,4 +455,19 @@ pub async fn ssh_disconnect(session_id: String) -> std::result::Result<(), Strin
         let _ = tx.send(SshInput::Disconnect);
     }
     Ok(())
+}
+
+fn ssh_log(msg: &str) {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    // ISO-ish timestamp from epoch seconds
+    let path = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    let log = format!("{path}/.local/share/slimrdm/ssh.log");
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log) {
+        let _ = writeln!(f, "[{ts}] {msg}");
+    }
+    log::debug!("{msg}");
 }

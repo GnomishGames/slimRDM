@@ -493,8 +493,7 @@ fn send_input(session_id: &str, input: SessionInput) -> Result<(), String> {
 fn build_performance_flags(flags: &RdpPerformanceFlags) -> PerformanceFlags {
     let mut pf = PerformanceFlags::empty();
     if flags.disable_wallpaper { pf |= PerformanceFlags::DISABLE_WALLPAPER; }
-    // ENABLE_FONT_SMOOTHING is inverted - setting it enables smoothing
-    // To disable font smoothing, we leave this flag unset
+    if !flags.disable_font_smoothing { pf |= PerformanceFlags::ENABLE_FONT_SMOOTHING; }
     if flags.disable_menu_animations { pf |= PerformanceFlags::DISABLE_MENUANIMATIONS; }
     if flags.disable_theme { pf |= PerformanceFlags::DISABLE_THEMING; }
     // DISABLE_CURSORSETTINGS covers both cursor shadow and blinking

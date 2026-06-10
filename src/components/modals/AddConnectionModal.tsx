@@ -64,8 +64,9 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
 
   const switchType = (t: ConnectionType) => {
     setConnType(t);
+    const prevDefault = connType === "ssh" ? sshDefaults.port : DEFAULTS[connType].port;
+    if (port === prevDefault) setPort(t === "ssh" ? sshDefaults.port : DEFAULTS[t].port);
     if (!isEdit) {
-      setPort(t === "ssh" ? sshDefaults.port : DEFAULTS[t].port);
       setAuthType(DEFAULTS[t].authType);
       if (t === "ssh" && sshDefaults.username) setUsername(sshDefaults.username);
     }

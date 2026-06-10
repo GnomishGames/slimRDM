@@ -16,7 +16,7 @@ export const DEFAULT_RDP_DEFAULTS: RdpDefaults = {
   height: 800,
   performanceFlags: {
     disableWallpaper: true,
-    disableFontSmoothing: true,
+    disableFontSmoothing: false,
     disableAnimation: true,
     disableTheme: false,
     disableMenuAnimations: true,

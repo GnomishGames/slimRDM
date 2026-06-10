@@ -4,6 +4,20 @@ mod error;
 
 use tauri::Manager;
 
+fn init_logger(data_dir: std::path::PathBuf) {
+    use std::fs::OpenOptions;
+    let log_path = data_dir.join("slimrdm.log");
+    if let Ok(file) = OpenOptions::new().create(true).append(true).open(&log_path) {
+        env_logger::Builder::new()
+            .filter_level(log::LevelFilter::Off)
+            .filter_module("russh", log::LevelFilter::Debug)
+            .filter_module("slimrdm", log::LevelFilter::Debug)
+            .target(env_logger::Target::Pipe(Box::new(file)))
+            .format_timestamp_secs()
+            .init();
+    }
+}
+
 
 pub fn run() {
     tauri::Builder::default()
@@ -15,7 +29,8 @@ pub fn run() {
         .setup(|app| {
             store::init(app.handle())?;
             if let Ok(data_dir) = app.path().app_data_dir() {
-                commands::known_hosts::init(data_dir);
+                commands::known_hosts::init(data_dir.clone());
+                init_logger(data_dir);
             }
             Ok(())
         })

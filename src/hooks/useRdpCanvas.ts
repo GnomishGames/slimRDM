@@ -158,6 +158,13 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
         for (const { x, y, width, height, fullWidth, fullHeight, data } of frames) {
           if (canvas.width !== fullWidth) canvas.width = fullWidth;
           if (canvas.height !== fullHeight) canvas.height = fullHeight;
+          // Pin the CSS display size to CSS pixels so the browser doesn't
+          // stretch the higher-resolution canvas back up on HiDPI displays.
+          if (!canvas.style.width) {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.style.width  = Math.round(fullWidth  / dpr) + "px";
+            canvas.style.height = Math.round(fullHeight / dpr) + "px";
+          }
 
           const binary = atob(data);
           const bytes = new Uint8ClampedArray(binary.length);
@@ -191,14 +198,15 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
       const jumpHostParams = resolveJumpHostParams(connection);
 
       const wrapper = canvasRef.current?.parentElement;
+      const dpr = window.devicePixelRatio || 1;
       await rdp.connect({
         sessionId,
         host: connection.host,
         port: connection.port,
         username: resolvedUsername,
         credentialRef,
-        width: wrapper?.clientWidth ?? rdpDefaults.width,
-        height: wrapper?.clientHeight ?? rdpDefaults.height,
+        width:  Math.round((wrapper?.clientWidth  ?? rdpDefaults.width)  * dpr),
+        height: Math.round((wrapper?.clientHeight ?? rdpDefaults.height) * dpr),
         performanceFlags: rdpDefaults.performanceFlags,
         connectionQuality: rdpDefaults.connectionQuality,
         jumpHostParams,
