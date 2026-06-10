@@ -283,39 +283,39 @@ async fn run_ssh_session(
                 .and_then(crate::commands::credentials::get_credential_sync)
                 .unwrap_or_default();
 
-            // Use keyboard-interactive first. russh's authenticate_password hangs on Ubuntu
-            // because sshd (with PAM + KbdInteractiveAuthentication) responds with
-            // SSH_MSG_USERAUTH_INFO_REQUEST instead of immediate success/failure, and
-            // russh's wait_recv_reply silently drops InfoRequest replies and loops forever.
-            // If the server rejects KI outright (Debian with KbdInteractiveAuthentication no),
-            // we fall back to direct password auth.
-            let mut ki = session
-                .authenticate_keyboard_interactive_start(&params.username, None)
+            // Try password auth first. Cisco switches (and most devices) handle this
+            // directly. For Ubuntu+PAM servers that respond with INFO_REQUEST instead
+            // of SUCCESS/FAILURE, russh now responds to the prompt inline using the
+            // stored password (patched in vendor/russh/src/client/encrypted.rs).
+            // If the server rejects password outright, fall back to keyboard-interactive
+            // (covers servers that only advertise keyboard-interactive method).
+            let pw_result = session
+                .authenticate_password(&params.username, &pw)
                 .await
                 .map_err(|e| format!("Auth failed: {}", e))?;
 
-            loop {
-                match ki {
-                    client::KeyboardInteractiveAuthResponse::Success => break true,
-                    client::KeyboardInteractiveAuthResponse::Failure => {
-                        break session
-                            .authenticate_password(&params.username, &pw)
-                            .await
-                            .map_err(|e| format!("Auth failed: {}", e))?;
-                    }
-                    client::KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
-                        // Supply the password for the first prompt (PAM "Password:" challenge).
-                        // Any extra prompts (e.g. 2FA) get an empty string; the user types those
-                        // in the terminal if the server sends a second InfoRequest.
-                        let responses: Vec<String> = prompts
-                            .iter()
-                            .enumerate()
-                            .map(|(i, _)| if i == 0 { pw.clone() } else { String::new() })
-                            .collect();
-                        ki = session
-                            .authenticate_keyboard_interactive_respond(responses)
-                            .await
-                            .map_err(|e| format!("Auth failed: {}", e))?;
+            if pw_result {
+                true
+            } else {
+                let mut ki = session
+                    .authenticate_keyboard_interactive_start(&params.username, None)
+                    .await
+                    .map_err(|e| format!("Auth failed: {}", e))?;
+                loop {
+                    match ki {
+                        client::KeyboardInteractiveAuthResponse::Success => break true,
+                        client::KeyboardInteractiveAuthResponse::Failure => break false,
+                        client::KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
+                            let responses: Vec<String> = prompts
+                                .iter()
+                                .enumerate()
+                                .map(|(i, _)| if i == 0 { pw.clone() } else { String::new() })
+                                .collect();
+                            ki = session
+                                .authenticate_keyboard_interactive_respond(responses)
+                                .await
+                                .map_err(|e| format!("Auth failed: {}", e))?;
+                        }
                     }
                 }
             }

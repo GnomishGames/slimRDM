@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.3] - 2026-06-10
+
+### Fixed
+- **SSH — authentication rejected on some Cisco switches** — password auth now works correctly on switches that disconnect the session after rejecting keyboard-interactive. Previously, attempting KI first caused the switch to close the connection before password auth could be tried, resulting in "Authentication rejected by server". The auth order is now password-first with a keyboard-interactive fallback, and russh's inline `USERAUTH_INFO_REQUEST` handler ensures Ubuntu+PAM hosts (which respond to password auth with a challenge prompt) continue to work.
+
+---
+
 ## [1.5.2] - 2026-06-10
 
 ### Fixed

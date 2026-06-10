@@ -256,10 +256,10 @@ impl Session {
                             .send(Reply::AuthFailure)
                             .map_err(|_| crate::Error::SendError)?;
 
-                        // If no other authentication method is allowed by the server, give up.
-                        if no_more_methods {
-                            return Err(crate::Error::NoAuthMethod.into());
-                        }
+                        // Note: even when remaining_methods is empty some servers (e.g. Cisco IOS)
+                        // genuinely accept a follow-up "password" request after rejecting
+                        // keyboard-interactive. Let the caller decide what to try next rather than
+                        // disconnecting here.
                     } else if buf.first() == Some(&msg::USERAUTH_INFO_REQUEST_OR_USERAUTH_PK_OK) {
                         if let Some(auth::CurrentRequest::PublicKey {
                             ref mut sent_pk_ok, ..
@@ -318,6 +318,29 @@ impl Session {
                                 }
                             };
                             // write responses
+                            enc.client_send_auth_response(&responses)?;
+                            return Ok(());
+                        } else if let Some(auth::Method::Password { ref password }) =
+                            self.common.auth_method
+                        {
+                            // Ubuntu with PAM: sshd responds to a "password" auth request
+                            // with SSH_MSG_USERAUTH_INFO_REQUEST instead of
+                            // SSH_MSG_USERAUTH_SUCCESS/FAILURE. Respond inline with the
+                            // stored password so authenticate_password() completes normally.
+                            debug!("password auth received info_request — responding inline");
+                            let password = password.clone();
+                            let mut r = buf.reader(1);
+                            r.read_string().map_err(crate::Error::from)?; // name
+                            r.read_string().map_err(crate::Error::from)?; // instructions
+                            r.read_string().map_err(crate::Error::from)?; // lang
+                            let n_prompts = r.read_u32().map_err(crate::Error::from)?;
+                            for _ in 0..n_prompts {
+                                r.read_string().map_err(crate::Error::from)?; // prompt text
+                                r.read_byte().map_err(crate::Error::from)?;   // echo flag
+                            }
+                            let responses: Vec<String> = (0..n_prompts)
+                                .map(|i| if i == 0 { password.clone() } else { String::new() })
+                                .collect();
                             enc.client_send_auth_response(&responses)?;
                             return Ok(());
                         }
