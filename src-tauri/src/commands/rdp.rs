@@ -155,9 +155,15 @@ where
     let width = params.width.unwrap_or(1280) as u16;
     let height = params.height.unwrap_or(800) as u16;
 
-    let password = params.credential_ref.as_deref()
-        .and_then(crate::commands::credentials::get_credential_sync)
-        .unwrap_or_default();
+    let password = match params.credential_ref.as_deref() {
+        Some(ref_key) => crate::commands::credentials::get_credential_async(ref_key)
+            .await
+            .unwrap_or_else(|e| {
+                log::warn!("[rdp {}] credential fetch failed: {}", session_id, e);
+                String::new()
+            }),
+        None => String::new(),
+    };
     let config = Config {
         credentials: Credentials::UsernamePassword {
             username: params.username.clone(),

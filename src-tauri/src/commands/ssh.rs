@@ -278,9 +278,15 @@ async fn run_ssh_session(
 
     // Fetch stored password upfront — needed for both auth and startup command tokens.
     let stored_pw = match &params.auth_type {
-        AuthType::Password => params.credential_ref.as_deref()
-            .and_then(crate::commands::credentials::get_credential_sync)
-            .unwrap_or_default(),
+        AuthType::Password => match params.credential_ref.as_deref() {
+            Some(ref_key) => crate::commands::credentials::get_credential_async(ref_key)
+                .await
+                .unwrap_or_else(|e| {
+                    ssh_log(&format!("credential fetch failed: {}", e));
+                    String::new()
+                }),
+            None => String::new(),
+        },
         _ => String::new(),
     };
 
