@@ -655,31 +655,87 @@ html, body, #root {
    parent element — moving them would remount xterm and kill connections.
    Inline styles set left/width (vertical) or top/height (horizontal). */
 
-/* Drag handle between split panes */
-.split-divider {
-  position: absolute;
-  background: var(--border);
-  z-index: 10;
-  transition: background 0.15s;
+/* ── Pane Chrome (split mode) ────────────────────────────── */
+.pane-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+.pane-header--focused {
+  border-bottom-color: var(--accent);
+}
+
+.pane-header-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
-.split-divider--vertical {
-  top: 0;
-  bottom: 0;
-  width: 4px;
+.pane-header-label {
+  flex: 1;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-header--focused .pane-header-label {
+  color: var(--text-primary);
+}
+
+.pane-header-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.pane-header-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.pane-header-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.pane-header-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.pane-divider-v {
   cursor: col-resize;
+  background: var(--border);
 }
 
-.split-divider--horizontal {
-  left: 0;
-  right: 0;
-  height: 4px;
+.pane-divider-h {
   cursor: row-resize;
+  background: var(--border);
 }
 
-.split-divider:hover,
-.split-divider:active {
+.pane-divider-v:hover,
+.pane-divider-v:active,
+.pane-divider-h:hover,
+.pane-divider-h:active {
   background: var(--accent);
 }
 
