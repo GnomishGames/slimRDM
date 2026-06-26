@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import { X, Columns2, Rows2 } from "lucide-react";
 import clsx from "clsx";
 import type { Session } from "../../types";
+import { useSettingsStore } from "../../store/settingsStore";
 
 interface Props {
   session: Session;
@@ -72,7 +73,12 @@ export function PaneHeader({
         <button
           className="pane-header-btn pane-header-btn--close"
           title="Close pane"
-          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            const { behavior } = useSettingsStore.getState();
+            if (behavior.confirmCloseTab && !window.confirm(`Close "${session.connection.label}"?`)) return;
+            onClose();
+          }}
         >
           <X size={11} />
         </button>

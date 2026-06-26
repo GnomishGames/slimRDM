@@ -39,7 +39,7 @@ export default function App() {
 
   const paneLayout = useMemo(
     () => (isSplit && paneRoot ? computePaneLayout(paneRoot) : null),
-    [paneRoot, isSplit]
+    [paneRoot]
   );
 
   const leafCount = paneRoot ? countLeaves(paneRoot) : 0;
@@ -193,9 +193,9 @@ export default function App() {
                         />
                       );
                     })}
-                    {paneLayout.dividers.map((d, i) => (
+                    {paneLayout.dividers.map((d) => (
                       <SplitDivider
-                        key={`div-${i}`}
+                        key={`div-${d.path.join("-") || "root"}`}
                         direction={d.direction}
                         path={d.path}
                         ratio={d.ratio}

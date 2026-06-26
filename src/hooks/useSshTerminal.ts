@@ -5,6 +5,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
 import { ssh } from "../utils/tauri";
 import { getTheme } from "../utils/terminalThemes";
+import { createLinkHandler } from "../utils/linkHandler";
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { Connection } from "../types";
@@ -93,7 +94,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
-    term.loadAddon(new WebLinksAddon());
+    term.loadAddon(new WebLinksAddon(createLinkHandler(term)));
     term.open(containerRef.current);
     fitAddon.fit();
 

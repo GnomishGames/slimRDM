@@ -685,7 +685,8 @@ html, body, #root {
 
 /* Split-view: panels are absolutely positioned so they never leave the same
    parent element — moving them would remount xterm and kill connections.
-   Inline styles set left/width (vertical) or top/height (horizontal). */
+   computePaneLayout() in paneTree.ts computes all four dimensions (left/top/width/height)
+   for each panel, header, and divider from the pane tree. */
 
 /* ── Pane Chrome (split mode) ────────────────────────────── */
 .pane-header {
@@ -752,6 +753,10 @@ html, body, #root {
 .pane-header-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.pane-header-btn--close:hover:not(:disabled) {
+  color: #ff7b72;
 }
 
 .pane-divider-v {
