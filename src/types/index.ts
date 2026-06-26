@@ -62,6 +62,23 @@ export interface Session {
   error?: string;
 }
 
+export interface PaneLeaf {
+  type: "leaf";
+  sessionId: string;
+}
+
+export interface PaneSplit {
+  type: "split";
+  // vertical = left|right (vertical divider line)
+  // horizontal = top|bottom (horizontal divider line)
+  direction: "vertical" | "horizontal";
+  ratio: number; // 0–1, fraction of space given to `first`
+  first: PaneNode;
+  second: PaneNode;
+}
+
+export type PaneNode = PaneLeaf | PaneSplit;
+
 export interface RdpDefaults {
   port: number;
   width: number;
@@ -90,8 +107,6 @@ export interface BehaviorSettings {
   copyOnSelect: boolean;
   confirmCloseTab: boolean;
   autoReconnect: boolean;
-  splitView: boolean;
-  splitViewDirection: "vertical" | "horizontal";
 }
 
 export type TunnelStatus = "connecting" | "active" | "stopped" | "error";
