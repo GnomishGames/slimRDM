@@ -1,8 +1,13 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { Category, Connection, Group, Session, SessionStatus, TunnelConfig, TunnelRuntime, TunnelStatus } from "../types";
+import {
+  Category, Connection, Group, PaneNode, Session, SessionStatus,
+  TunnelConfig, TunnelRuntime, TunnelStatus,
+} from "../types";
 import { tunnels as tunnelsApi } from "../utils/tauri";
-import { useSettingsStore } from "./settingsStore";
+import {
+  countLeaves, firstLeafSessionId, insertSplit, removeLeaf, updateRatio,
+} from "../utils/paneTree";
 
 interface AppState {
   // Data
@@ -11,7 +16,7 @@ interface AppState {
   categories: Category[];
   sessions: Session[];
   activeSessionId: string | null;
-  splitSessionIds: string[];
+  paneRoot: PaneNode | null;
 
   // Tunnels
   tunnelConfigs: TunnelConfig[];
@@ -49,7 +54,10 @@ interface AppState {
   closeSession: (sessionId: string) => void;
   setSessionStatus: (sessionId: string, status: SessionStatus, error?: string) => void;
   setActiveSession: (sessionId: string | null) => void;
-  setSplitSessions: (ids: string[]) => void;
+
+  splitPane: (sessionId: string, direction: "vertical" | "horizontal") => void;
+  closePane: (sessionId: string) => void;
+  setPaneRatio: (path: ("first" | "second")[], ratio: number) => void;
 
   setSearchQuery: (q: string) => void;
   setSelectedGroup: (id: string | null) => void;
@@ -69,7 +77,7 @@ function resolveJumpHostParams(conn: Connection, groups: Group[]) {
   return { host: conn.host, port: conn.port, username, authType, credentialRef, privateKeyPath };
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   connections: [],
   groups: [],
   categories: [],
@@ -77,7 +85,7 @@ export const useAppStore = create<AppState>((set) => ({
   tunnelConfigs: [],
   tunnelRuntimes: {},
   activeSessionId: null,
-  splitSessionIds: [],
+  paneRoot: null,
   searchQuery: "",
   selectedGroupId: null,
   sidebarWidth: 260,
@@ -196,7 +204,7 @@ export const useAppStore = create<AppState>((set) => ({
   },
 
   connectTunnel: async (configId) => {
-    const { tunnelConfigs, connections, groups } = useAppStore.getState();
+    const { tunnelConfigs, connections, groups } = get();
     const cfg = tunnelConfigs.find((c) => c.id === configId);
     if (!cfg) throw new Error("Tunnel config not found");
     const jumpConn = connections.find((c) => c.id === cfg.jumpHostId);
@@ -213,10 +221,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   updateTunnelRuntime: (id, patch) => {
     set((s) => ({
-      tunnelRuntimes: {
-        ...s.tunnelRuntimes,
-        [id]: { ...s.tunnelRuntimes[id], ...patch },
-      },
+      tunnelRuntimes: { ...s.tunnelRuntimes, [id]: { ...s.tunnelRuntimes[id], ...patch } },
     }));
   },
 
@@ -237,14 +242,7 @@ export const useAppStore = create<AppState>((set) => ({
       status: "connecting",
       openedAt: Date.now(),
     };
-    set((s) => {
-      const { behavior } = useSettingsStore.getState();
-      const splitSessionIds =
-        behavior.splitView && s.splitSessionIds.length < 3
-          ? [...s.splitSessionIds, sessionId]
-          : s.splitSessionIds;
-      return { sessions: [...s.sessions, session], activeSessionId: sessionId, splitSessionIds };
-    });
+    set((s) => ({ sessions: [...s.sessions, session], activeSessionId: sessionId }));
     return sessionId;
   },
 
@@ -255,8 +253,7 @@ export const useAppStore = create<AppState>((set) => ({
         s.activeSessionId === sessionId
           ? sessions[sessions.length - 1]?.id ?? null
           : s.activeSessionId;
-      const splitSessionIds = s.splitSessionIds.filter((id) => id !== sessionId);
-      return { sessions, activeSessionId, splitSessionIds };
+      return { sessions, activeSessionId };
     });
   },
 
@@ -268,30 +265,59 @@ export const useAppStore = create<AppState>((set) => ({
     }));
   },
 
-  setActiveSession: (sessionId) => {
-    set((s) => {
-      if (sessionId === null) return { activeSessionId: null };
-      const { behavior } = useSettingsStore.getState();
-      if (!behavior.splitView) return { activeSessionId: sessionId };
+  setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
 
-      const { splitSessionIds } = s;
-      if (splitSessionIds.includes(sessionId)) {
-        // Already visible in split — just focus it
-        return { activeSessionId: sessionId };
-      }
-      if (splitSessionIds.length < 3) {
-        // Room for one more pane
-        return { activeSessionId: sessionId, splitSessionIds: [...splitSessionIds, sessionId] };
-      }
-      // Replace the currently focused pane
-      const activeIdx = splitSessionIds.indexOf(s.activeSessionId ?? "");
-      const newSplit = [...splitSessionIds];
-      newSplit[activeIdx >= 0 ? activeIdx : splitSessionIds.length - 1] = sessionId;
-      return { activeSessionId: sessionId, splitSessionIds: newSplit };
+  splitPane: (sessionId, direction) => {
+    set((s) => {
+      if (s.paneRoot && countLeaves(s.paneRoot) >= 4) return {};
+      const session = s.sessions.find((sess) => sess.id === sessionId);
+      if (!session) return {};
+
+      const newSessionId = `${session.connection.id}-${Date.now()}`;
+      const newSession: Session = {
+        id: newSessionId,
+        connectionId: session.connection.id,
+        connection: session.connection,
+        status: "connecting",
+        openedAt: Date.now(),
+      };
+
+      const baseRoot: PaneNode = s.paneRoot ?? { type: "leaf", sessionId };
+      const newRoot = insertSplit(baseRoot, sessionId, direction, newSessionId);
+
+      return {
+        sessions: [...s.sessions, newSession],
+        paneRoot: newRoot,
+        activeSessionId: newSessionId,
+      };
     });
   },
 
-  setSplitSessions: (ids) => set({ splitSessionIds: ids }),
+  closePane: (sessionId) => {
+    set((s) => {
+      const sessions = s.sessions.filter((sess) => sess.id !== sessionId);
+      const newRoot = s.paneRoot ? removeLeaf(s.paneRoot, sessionId) : null;
+
+      // Exit split mode when only one pane remains
+      const paneRoot = newRoot?.type === "split" ? newRoot : null;
+
+      let activeSessionId = s.activeSessionId;
+      if (activeSessionId === sessionId) {
+        activeSessionId = newRoot
+          ? firstLeafSessionId(newRoot)
+          : sessions[sessions.length - 1]?.id ?? null;
+      }
+
+      return { sessions, paneRoot, activeSessionId };
+    });
+  },
+
+  setPaneRatio: (path, ratio) => {
+    set((s) => {
+      if (!s.paneRoot) return {};
+      return { paneRoot: updateRatio(s.paneRoot, path, ratio) };
+    });
+  },
 
   setSearchQuery: (q) => set({ searchQuery: q }),
   setSelectedGroup: (id) => set({ selectedGroupId: id }),
