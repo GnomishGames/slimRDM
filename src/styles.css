@@ -634,6 +634,38 @@ html, body, #root {
 .tab:hover .tab-close { opacity: 1; }
 .tab-close:hover { background: var(--bg-hover); color: var(--text-primary); }
 
+.tab-bar-split-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding: 0 6px;
+  flex-shrink: 0;
+}
+
+.tab-split-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.tab-split-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tab-split-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 /* ── Session Content ─────────────────────────────────── */
 .session-content {
   flex: 1;
