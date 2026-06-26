@@ -353,7 +353,7 @@ function AppearanceSection() {
 function BehaviorSection() {
   const { behavior, setBehavior } = useSettingsStore();
 
-  type BoolKey = "copyOnSelect" | "confirmCloseTab" | "autoReconnect" | "splitView";
+  type BoolKey = "copyOnSelect" | "confirmCloseTab" | "autoReconnect";
   const rows: { key: BoolKey; label: string; help: string }[] = [
     {
       key: "copyOnSelect",
@@ -369,11 +369,6 @@ function BehaviorSection() {
       key: "autoReconnect",
       label: "Auto-Reconnect",
       help: "Automatically reconnect SSH sessions after unexpected disconnects.",
-    },
-    {
-      key: "splitView",
-      label: "Split View",
-      help: "Show up to 3 terminals at once. Click a tab to add it to the layout; drag dividers to resize panes.",
     },
   ];
 
@@ -397,29 +392,6 @@ function BehaviorSection() {
           <p className="settings-help-text">{help}</p>
         </div>
       ))}
-
-      {behavior.splitView && (
-        <div>
-          <div className="settings-group">
-            <label className="settings-row-label">Split Direction</label>
-            <div className="type-toggle">
-              <button
-                className={clsx("type-btn", behavior.splitViewDirection !== "horizontal" && "type-btn--active")}
-                onClick={() => setBehavior({ splitViewDirection: "vertical" })}
-              >
-                Side by side
-              </button>
-              <button
-                className={clsx("type-btn", behavior.splitViewDirection === "horizontal" && "type-btn--active")}
-                onClick={() => setBehavior({ splitViewDirection: "horizontal" })}
-              >
-                Stacked
-              </button>
-            </div>
-          </div>
-          <p className="settings-help-text">Side by side arranges terminals left to right. Stacked arranges them top to bottom.</p>
-        </div>
-      )}
     </div>
   );
 }

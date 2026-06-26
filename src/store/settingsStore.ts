@@ -31,8 +31,6 @@ export const DEFAULT_BEHAVIOR: BehaviorSettings = {
   copyOnSelect: false,
   confirmCloseTab: false,
   autoReconnect: false,
-  splitView: false,
-  splitViewDirection: "vertical",
 };
 
 export const DEFAULT_TERMINAL: TerminalSettings = {
