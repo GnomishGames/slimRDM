@@ -13,15 +13,17 @@ export function SessionTabs() {
 
   return (
     <div className="tab-bar">
-      {sessions.map((session) => (
-        <Tab
-          key={session.id}
-          session={session}
-          active={session.id === activeSessionId}
-          onActivate={() => setActiveSession(session.id)}
-          onClose={() => closeSession(session.id)}
-        />
-      ))}
+      <div className="tab-bar-tabs">
+        {sessions.map((session) => (
+          <Tab
+            key={session.id}
+            session={session}
+            active={session.id === activeSessionId}
+            onActivate={() => setActiveSession(session.id)}
+            onClose={() => closeSession(session.id)}
+          />
+        ))}
+      </div>
       <div className="tab-bar-split-actions">
         <button
           className="tab-split-btn"
