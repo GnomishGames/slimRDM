@@ -59,7 +59,7 @@ struct SshOutputEvent {
 #[serde(rename_all = "camelCase")]
 struct SshStatusEvent {
     session_id: String,
-    status: String, // "connected" | "disconnected" | "error"
+    status: String, // "connected" | "closed" | "error"
     message: Option<String>,
 }
 
