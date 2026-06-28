@@ -440,7 +440,7 @@ async fn run_ssh_session(
         }
     }
 
-    // Process input from frontend, break on server EOF or explicit disconnect
+    // Process input from frontend, return on server EOF or explicit disconnect
     loop {
         tokio::select! {
             msg = input_rx.recv() => {
@@ -457,17 +457,15 @@ async fn run_ssh_session(
                     }
                     Some(SshInput::Disconnect) | None => {
                         let _ = channel.eof().await;
-                        return Ok(false);  // frontend-initiated disconnect
+                        return Ok(false);
                     }
                 }
             }
             _ = close_rx.recv() => {
-                return Ok(true);   // graceful shell exit (channel_eof fired)
+                return Ok(true);
             }
         }
     }
-
-    Ok(false)  // fallback (loop exited unexpectedly)
 }
 
 #[tauri::command]
