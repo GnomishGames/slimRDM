@@ -252,8 +252,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       const sessions = s.sessions.filter((sess) => sess.id !== primaryId && sess.tabId !== primaryId);
       const tabLayouts = { ...s.tabLayouts };
       delete tabLayouts[primaryId];
-      const lastPrimary = [...sessions].reverse().find((sess) => sess.tabId === sess.id);
-      const activeSessionId = lastPrimary?.id ?? null;
+      const activeOwned =
+        s.activeSessionId === primaryId ||
+        s.sessions.find((sess) => sess.id === s.activeSessionId)?.tabId === primaryId;
+      const activeSessionId = activeOwned
+        ? ([...sessions].reverse().find((sess) => sess.tabId === sess.id)?.id ?? null)
+        : s.activeSessionId;
       return { sessions, tabLayouts, activeSessionId };
     });
   },
@@ -308,8 +312,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         const sessions = s.sessions.filter((sess) => sess.id !== sessionId && sess.tabId !== sessionId);
         const tabLayouts = { ...s.tabLayouts };
         delete tabLayouts[sessionId];
-        const lastPrimary = [...sessions].reverse().find((sess) => sess.tabId === sess.id);
-        const activeSessionId = lastPrimary?.id ?? null;
+        const activeOwned =
+          s.activeSessionId === sessionId ||
+          s.sessions.find((sess) => sess.id === s.activeSessionId)?.tabId === sessionId;
+        const activeSessionId = activeOwned
+          ? ([...sessions].reverse().find((sess) => sess.tabId === sess.id)?.id ?? null)
+          : s.activeSessionId;
         return { sessions, tabLayouts, activeSessionId };
       } else {
         const sessions = s.sessions.filter((sess) => sess.id !== sessionId);
