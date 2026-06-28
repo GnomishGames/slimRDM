@@ -102,19 +102,21 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Ctrl+PageUp/Down tab cycling (single-session mode only)
+  // Ctrl+PageUp/Down tab cycling — cycles primary sessions only
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || sessionsRef.current.length < 2) return;
+      if (!e.ctrlKey) return;
       if (e.key !== "PageDown" && e.key !== "PageUp") return;
-      if (isSplit) return;
+      const primaries = sessionsRef.current.filter((s) => s.tabId === s.id);
+      if (primaries.length < 2) return;
       e.preventDefault();
-      const idx = sessionsRef.current.findIndex((s) => s.id === activeIdRef.current);
+      const activeTabId = sessionsRef.current.find((s) => s.id === activeIdRef.current)?.tabId ?? activeIdRef.current;
+      const idx = primaries.findIndex((s) => s.id === activeTabId);
       if (idx === -1) return;
       const next = e.key === "PageDown"
-        ? (idx + 1) % sessionsRef.current.length
-        : (idx - 1 + sessionsRef.current.length) % sessionsRef.current.length;
-      setActiveSession(sessionsRef.current[next].id);
+        ? (idx + 1) % primaries.length
+        : (idx - 1 + primaries.length) % primaries.length;
+      setActiveSession(primaries[next].id);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
