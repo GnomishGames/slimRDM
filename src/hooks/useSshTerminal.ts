@@ -65,9 +65,6 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const listenersRef = useRef<Promise<UnlistenFn>[]>([]);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const connectionRef = useRef(connection);
-  connectionRef.current = connection;
   const setSessionStatus = useAppStore((s) => s.setSessionStatus);
   const closePane = useAppStore((s) => s.closePane);
 
@@ -122,42 +119,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
             setSessionStatus(sessionId, "connected");
             term.writeln("\r\n\x1b[32m● Connected\x1b[0m\r\n");
           } else if (status === "closed") {
-            // Graceful shell exit (user typed `exit`) — always close pane, no autoReconnect
             closePane(sessionId);
-          } else if (status === "disconnected") {
-            const { behavior, sshDefaults } = useSettingsStore.getState();
-            if (behavior.autoReconnect) {
-              setSessionStatus(sessionId, "connecting");
-              term.writeln("\r\n\x1b[33m● Disconnected. Reconnecting in 3s…\x1b[0m");
-              reconnectTimerRef.current = setTimeout(async () => {
-                const conn = connectionRef.current;
-                const resolved = resolveCredentials(conn);
-                const jumpHostParams = resolveJumpHostParams(conn);
-                try {
-                  await ssh.connect({
-                    sessionId,
-                    host: conn.host,
-                    port: conn.port,
-                    username: resolved.username,
-                    authType: resolved.authType,
-                    credentialRef: resolved.credentialRef,
-                    privateKeyPath: resolved.privateKeyPath ?? conn.privateKeyPath,
-                    keepaliveInterval: sshDefaults.keepaliveInterval,
-                    connectTimeout: sshDefaults.connectTimeout,
-                    startupCommands: conn.startupCommands,
-                    initialCols: termRef.current?.cols,
-                    initialRows: termRef.current?.rows,
-                    jumpHostParams,
-                  });
-                } catch (err) {
-                  const msg = String(err);
-                  term.writeln(`\r\n\x1b[31m● Reconnect failed: ${msg}\x1b[0m`);
-                  setSessionStatus(sessionId, "error", msg);
-                }
-              }, 3000);
-            } else {
-              closePane(sessionId);
-            }
           } else if (status === "error") {
             setSessionStatus(sessionId, "error", message);
             term.writeln(`\r\n\x1b[31m● Error: ${message ?? "unknown"}\x1b[0m`);
@@ -173,7 +135,6 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
     resizeObserver.observe(containerRef.current);
 
     return () => {
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       listenersRef.current.forEach((p) => p.then((fn) => fn()));
       resizeObserver.disconnect();
       ssh.disconnect(sessionId);
