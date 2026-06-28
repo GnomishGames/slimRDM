@@ -60,6 +60,7 @@ export interface Session {
   status: SessionStatus;
   openedAt: number;
   error?: string;
+  tabId: string;
 }
 
 export interface PaneLeaf {
