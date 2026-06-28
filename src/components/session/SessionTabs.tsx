@@ -7,20 +7,26 @@ import { countLeaves } from "../../utils/paneTree";
 import clsx from "clsx";
 
 export function SessionTabs() {
-  const { sessions, activeSessionId, paneRoot, splitPane, setActiveSession, closeSession } = useAppStore();
-  const leafCount = paneRoot ? countLeaves(paneRoot) : 0;
+  const { sessions, activeSessionId, tabLayouts, splitPane, setActiveSession, closeTab } = useAppStore();
+
+  const activeTabId = activeSessionId
+    ? (sessions.find((s) => s.id === activeSessionId)?.tabId ?? activeSessionId)
+    : null;
+  const primarySessions = sessions.filter((s) => s.tabId === s.id);
+  const activeTabLayout = activeTabId ? tabLayouts[activeTabId] : undefined;
+  const leafCount = activeTabLayout ? countLeaves(activeTabLayout) : 0;
   const canSplit = leafCount < 4 && activeSessionId !== null;
 
   return (
     <div className="tab-bar">
       <div className="tab-bar-tabs">
-        {sessions.map((session) => (
+        {primarySessions.map((session) => (
           <Tab
             key={session.id}
             session={session}
-            active={session.id === activeSessionId}
+            active={session.id === activeTabId}
             onActivate={() => setActiveSession(session.id)}
-            onClose={() => closeSession(session.id)}
+            onClose={() => closeTab(session.id)}
           />
         ))}
       </div>

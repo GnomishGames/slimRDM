@@ -414,7 +414,7 @@ function ConnectionItem({
   const isRdp = connType === "rdp";
   const isTrm = connType === "trm";
   const session = useAppStore((s) => s.sessions.find((sess) => sess.connectionId === conn.id));
-  const closeSession = useAppStore((s) => s.closeSession);
+  const closeTab = useAppStore((s) => s.closeTab);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const groups = useAppStore((s) => s.groups);
   const connStatus = session?.status ?? "idle";
@@ -429,7 +429,7 @@ function ConnectionItem({
   };
 
   const handleReconnect = () => {
-    if (session) closeSession(session.id);
+    if (session) closeTab(session.tabId ?? session.id);
     onOpen(conn);
     setShowMenu(false);
   };

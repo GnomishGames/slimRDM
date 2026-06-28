@@ -16,7 +16,7 @@ import "./styles.css";
 export default function App() {
   const {
     loadConnections, loadGroups, loadCategories,
-    sessions, activeSessionId, paneRoot,
+    sessions, activeSessionId, tabLayouts,
     splitPane, closePane, setActiveSession,
     updateTunnelRuntime, clearTunnelRuntime, loadTunnelConfigs,
     setSearchQuery,
@@ -35,14 +35,18 @@ export default function App() {
 
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const isSplit = paneRoot !== null && paneRoot.type === "split";
+  const activeTabId = activeSessionId
+    ? (sessions.find((s) => s.id === activeSessionId)?.tabId ?? activeSessionId)
+    : null;
+  const activeTabLayout = activeTabId ? tabLayouts[activeTabId] : undefined;
+  const isSplit = activeTabLayout !== undefined;
 
   const paneLayout = useMemo(
-    () => (isSplit && paneRoot ? computePaneLayout(paneRoot) : null),
-    [paneRoot]
+    () => (activeTabLayout ? computePaneLayout(activeTabLayout) : null),
+    [activeTabLayout]
   );
 
-  const leafCount = paneRoot ? countLeaves(paneRoot) : 0;
+  const leafCount = activeTabLayout ? countLeaves(activeTabLayout) : 0;
 
   useEffect(() => {
     const unlisten = listen<{ id: string; status: string; localPort?: number; error?: string }>(
@@ -150,7 +154,7 @@ export default function App() {
         <div className="main-area">
           {sessions.length > 0 ? (
             <>
-              {!isSplit && <SessionTabs />}
+              <SessionTabs />
               {/*
                 All session panels live in the same container at all times.
                 Moving them to a different parent remounts xterm and kills connections.
@@ -160,8 +164,9 @@ export default function App() {
               <div ref={contentRef} className="session-content">
                 {sessions.map((session) => {
                   const panelStyle = paneLayout?.panelStyles.get(session.id);
-                  const inTree = isSplit ? panelStyle !== undefined : false;
-                  const active = isSplit ? inTree : session.id === activeSessionId;
+                  const active = isSplit
+                    ? panelStyle !== undefined
+                    : session.id === activeTabId;
                   const focused = session.id === activeSessionId;
                   return (
                     <SessionPanel
@@ -174,7 +179,7 @@ export default function App() {
                   );
                 })}
 
-                {isSplit && paneLayout && (
+                {isSplit && paneLayout && activeTabLayout && (
                   <>
                     {Array.from(paneLayout.headerStyles.entries()).map(([sessionId, style]) => {
                       const session = sessions.find((s) => s.id === sessionId);

@@ -21,7 +21,7 @@ export function useTrmTerminal({ sessionId, connection, containerRef }: UseTrmTe
   const fitAddonRef = useRef<FitAddon | null>(null);
   const listenersRef = useRef<Promise<UnlistenFn>[]>([]);
   const setSessionStatus = useAppStore((s) => s.setSessionStatus);
-  const closeSession = useAppStore((s) => s.closeSession);
+  const closePane = useAppStore((s) => s.closePane);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -70,7 +70,7 @@ export function useTrmTerminal({ sessionId, connection, containerRef }: UseTrmTe
             setSessionStatus(sessionId, "connected");
             term.writeln("\r\n\x1b[32m● Connected\x1b[0m\r\n");
           } else if (status === "disconnected") {
-            closeSession(sessionId);
+            closePane(sessionId);
           } else if (status === "error") {
             setSessionStatus(sessionId, "error", message);
             term.writeln(`\r\n\x1b[31m● Error: ${message ?? "unknown"}\x1b[0m`);

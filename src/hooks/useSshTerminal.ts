@@ -69,7 +69,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
   const connectionRef = useRef(connection);
   connectionRef.current = connection;
   const setSessionStatus = useAppStore((s) => s.setSessionStatus);
-  const closeSession = useAppStore((s) => s.closeSession);
+  const closePane = useAppStore((s) => s.closePane);
 
   // Create terminal on mount; use a snapshot of settings at that moment
   useEffect(() => {
@@ -153,7 +153,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
                 }
               }, 3000);
             } else {
-              closeSession(sessionId);
+              closePane(sessionId);
             }
           } else if (status === "error") {
             setSessionStatus(sessionId, "error", message);

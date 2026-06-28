@@ -117,7 +117,7 @@ type PendingFrame = {
 
 export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasOptions) {
   const setSessionStatus = useAppStore((s) => s.setSessionStatus);
-  const closeSession = useAppStore((s) => s.closeSession);
+  const closePane = useAppStore((s) => s.closePane);
   const rdpDefaults = useSettingsStore((s) => s.rdpDefaults);
   const connectedRef = useRef(false);
   const pendingFramesRef = useRef<PendingFrame[]>([]);
@@ -136,7 +136,7 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
           if (event.payload.sessionId !== sessionId) return;
           const { status, message } = event.payload;
           if (status === "disconnected") {
-            closeSession(sessionId);
+            closePane(sessionId);
           } else {
             setSessionStatus(sessionId, status as SessionStatus, message);
             if (status === "connected") connectedRef.current = true;
