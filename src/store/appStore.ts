@@ -6,7 +6,7 @@ import {
 } from "../types";
 import { tunnels as tunnelsApi } from "../utils/tauri";
 import {
-  countLeaves, insertSplit, removeLeaf, updateRatio,
+  countLeaves, firstLeafSessionId, insertSplit, removeLeaf, updateRatio,
 } from "../utils/paneTree";
 
 interface AppState {
@@ -309,15 +309,39 @@ export const useAppStore = create<AppState>((set, get) => ({
       const isPrimary = sessionId === tabId;
 
       if (isPrimary) {
-        const sessions = s.sessions.filter((sess) => sess.id !== sessionId && sess.tabId !== sessionId);
+        const currentTree = s.tabLayouts[sessionId];
+
+        if (!currentTree) {
+          // Single-pane tab — close entirely
+          const sessions = s.sessions.filter((sess) => sess.id !== sessionId);
+          const tabLayouts = { ...s.tabLayouts };
+          delete tabLayouts[sessionId];
+          const activeSessionId = s.activeSessionId === sessionId
+            ? ([...sessions].reverse().find((sess) => sess.tabId === sess.id)?.id ?? null)
+            : s.activeSessionId;
+          return { sessions, tabLayouts, activeSessionId };
+        }
+
+        // Has split — remove this pane leaf, promote first remaining as new primary
+        const newRoot = removeLeaf(currentTree, sessionId);
+        if (!newRoot) {
+          // Fallback: tree somehow emptied, close the tab
+          const sessions = s.sessions.filter((sess) => sess.id !== sessionId && sess.tabId !== sessionId);
+          const tabLayouts = { ...s.tabLayouts };
+          delete tabLayouts[sessionId];
+          return { sessions, tabLayouts, activeSessionId: null };
+        }
+
+        const newPrimaryId = firstLeafSessionId(newRoot);
+        const sessions = s.sessions
+          .filter((sess) => sess.id !== sessionId)
+          .map((sess) => sess.tabId === sessionId ? { ...sess, tabId: newPrimaryId } : sess);
         const tabLayouts = { ...s.tabLayouts };
         delete tabLayouts[sessionId];
-        const activeOwned =
-          s.activeSessionId === sessionId ||
-          s.sessions.find((sess) => sess.id === s.activeSessionId)?.tabId === sessionId;
-        const activeSessionId = activeOwned
-          ? ([...sessions].reverse().find((sess) => sess.tabId === sess.id)?.id ?? null)
-          : s.activeSessionId;
+        if (newRoot.type === "split") {
+          tabLayouts[newPrimaryId] = newRoot;
+        }
+        const activeSessionId = s.activeSessionId === sessionId ? newPrimaryId : s.activeSessionId;
         return { sessions, tabLayouts, activeSessionId };
       } else {
         const sessions = s.sessions.filter((sess) => sess.id !== sessionId);
