@@ -84,12 +84,16 @@ pub async fn ssh_connect(app: AppHandle, params: SshConnectParams) -> std::resul
         });
 
         match run_ssh_session(&app_clone, &params, &mut input_rx).await {
-            Ok(_) => {
+            Ok(true) => {
+                // Graceful exit — user typed `exit` (channel_eof fired)
                 let _ = app_clone.emit("ssh-status", SshStatusEvent {
                     session_id: session_id.clone(),
-                    status: "disconnected".into(),
+                    status: "closed".into(),
                     message: None,
                 });
+            }
+            Ok(false) => {
+                // Frontend-initiated disconnect — frontend already handling teardown
             }
             Err(e) => {
                 let _ = app_clone.emit("ssh-status", SshStatusEvent {
@@ -112,7 +116,7 @@ async fn run_ssh_session(
     app: &AppHandle,
     params: &SshConnectParams,
     input_rx: &mut mpsc::UnboundedReceiver<SshInput>,
-) -> std::result::Result<(), String> {
+) -> std::result::Result<bool, String> {
     use russh::*;
     use russh_keys::*;
     use std::sync::Arc;
@@ -453,17 +457,17 @@ async fn run_ssh_session(
                     }
                     Some(SshInput::Disconnect) | None => {
                         let _ = channel.eof().await;
-                        break;
+                        return Ok(false);  // frontend-initiated disconnect
                     }
                 }
             }
             _ = close_rx.recv() => {
-                break;
+                return Ok(true);   // graceful shell exit (channel_eof fired)
             }
         }
     }
 
-    Ok(())
+    Ok(false)  // fallback (loop exited unexpectedly)
 }
 
 #[tauri::command]

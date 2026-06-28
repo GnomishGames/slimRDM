@@ -121,6 +121,9 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
           if (status === "connected") {
             setSessionStatus(sessionId, "connected");
             term.writeln("\r\n\x1b[32m● Connected\x1b[0m\r\n");
+          } else if (status === "closed") {
+            // Graceful shell exit (user typed `exit`) — always close pane, no autoReconnect
+            closePane(sessionId);
           } else if (status === "disconnected") {
             const { behavior, sshDefaults } = useSettingsStore.getState();
             if (behavior.autoReconnect) {
