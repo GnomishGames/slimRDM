@@ -120,7 +120,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSplit]);
+  }, []);
 
   return (
     <>
