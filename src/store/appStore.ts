@@ -6,7 +6,7 @@ import {
 } from "../types";
 import { tunnels as tunnelsApi } from "../utils/tauri";
 import {
-  countLeaves, firstLeafSessionId, insertSplit, removeLeaf, updateRatio,
+  countLeaves, insertSplit, removeLeaf, updateRatio,
 } from "../utils/paneTree";
 
 interface AppState {
@@ -16,7 +16,7 @@ interface AppState {
   categories: Category[];
   sessions: Session[];
   activeSessionId: string | null;
-  paneRoot: PaneNode | null;
+  tabLayouts: Record<string, PaneNode>;
 
   // Tunnels
   tunnelConfigs: TunnelConfig[];
@@ -51,7 +51,7 @@ interface AppState {
   clearTunnelRuntime: (id: string) => void;
 
   openSession: (connection: Connection) => string;
-  closeSession: (sessionId: string) => void;
+  closeTab: (primarySessionId: string) => void;
   setSessionStatus: (sessionId: string, status: SessionStatus, error?: string) => void;
   setActiveSession: (sessionId: string | null) => void;
 
@@ -85,7 +85,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   tunnelConfigs: [],
   tunnelRuntimes: {},
   activeSessionId: null,
-  paneRoot: null,
+  tabLayouts: {},
   searchQuery: "",
   selectedGroupId: null,
   sidebarWidth: 260,
@@ -241,19 +241,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       connection,
       status: "connecting",
       openedAt: Date.now(),
+      tabId: sessionId,
     };
     set((s) => ({ sessions: [...s.sessions, session], activeSessionId: sessionId }));
     return sessionId;
   },
 
-  closeSession: (sessionId) => {
+  closeTab: (primaryId) => {
     set((s) => {
-      const sessions = s.sessions.filter((sess) => sess.id !== sessionId);
-      const activeSessionId =
-        s.activeSessionId === sessionId
-          ? sessions[sessions.length - 1]?.id ?? null
-          : s.activeSessionId;
-      return { sessions, activeSessionId };
+      const sessions = s.sessions.filter((sess) => sess.id !== primaryId && sess.tabId !== primaryId);
+      const tabLayouts = { ...s.tabLayouts };
+      delete tabLayouts[primaryId];
+      const lastPrimary = [...sessions].reverse().find((sess) => sess.tabId === sess.id);
+      const activeSessionId = lastPrimary?.id ?? null;
+      return { sessions, tabLayouts, activeSessionId };
     });
   },
 
@@ -269,9 +270,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   splitPane: (sessionId, direction) => {
     set((s) => {
-      if (s.paneRoot && countLeaves(s.paneRoot) >= 4) return {};
       const session = s.sessions.find((sess) => sess.id === sessionId);
       if (!session) return {};
+
+      const tabId = session.tabId ?? sessionId;
+      const baseRoot: PaneNode = s.tabLayouts[tabId] ?? { type: "leaf", sessionId: tabId };
+
+      if (countLeaves(baseRoot) >= 4) return {};
 
       const newSessionId = `${session.connection.id}-${Date.now()}`;
       const newSession: Session = {
@@ -280,14 +285,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         connection: session.connection,
         status: "connecting",
         openedAt: Date.now(),
+        tabId,
       };
 
-      const baseRoot: PaneNode = s.paneRoot ?? { type: "leaf", sessionId };
       const newRoot = insertSplit(baseRoot, sessionId, direction, newSessionId);
 
       return {
         sessions: [...s.sessions, newSession],
-        paneRoot: newRoot,
+        tabLayouts: { ...s.tabLayouts, [tabId]: newRoot },
         activeSessionId: newSessionId,
       };
     });
@@ -295,27 +300,40 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   closePane: (sessionId) => {
     set((s) => {
-      const sessions = s.sessions.filter((sess) => sess.id !== sessionId);
-      const newRoot = s.paneRoot ? removeLeaf(s.paneRoot, sessionId) : null;
+      const session = s.sessions.find((sess) => sess.id === sessionId);
+      const tabId = session?.tabId ?? sessionId;
+      const isPrimary = sessionId === tabId;
 
-      // Exit split mode when only one pane remains
-      const paneRoot = newRoot?.type === "split" ? newRoot : null;
-
-      let activeSessionId = s.activeSessionId;
-      if (activeSessionId === sessionId) {
-        activeSessionId = newRoot
-          ? firstLeafSessionId(newRoot)
-          : sessions[sessions.length - 1]?.id ?? null;
+      if (isPrimary) {
+        const sessions = s.sessions.filter((sess) => sess.id !== sessionId && sess.tabId !== sessionId);
+        const tabLayouts = { ...s.tabLayouts };
+        delete tabLayouts[sessionId];
+        const lastPrimary = [...sessions].reverse().find((sess) => sess.tabId === sess.id);
+        const activeSessionId = lastPrimary?.id ?? null;
+        return { sessions, tabLayouts, activeSessionId };
+      } else {
+        const sessions = s.sessions.filter((sess) => sess.id !== sessionId);
+        const current = s.tabLayouts[tabId];
+        const newRoot = current ? removeLeaf(current, sessionId) : null;
+        const tabLayouts = { ...s.tabLayouts };
+        if (newRoot?.type === "split") {
+          tabLayouts[tabId] = newRoot;
+        } else {
+          delete tabLayouts[tabId];
+        }
+        const activeSessionId = s.activeSessionId === sessionId ? tabId : s.activeSessionId;
+        return { sessions, tabLayouts, activeSessionId };
       }
-
-      return { sessions, paneRoot, activeSessionId };
     });
   },
 
   setPaneRatio: (path, ratio) => {
     set((s) => {
-      if (!s.paneRoot) return {};
-      return { paneRoot: updateRatio(s.paneRoot, path, ratio) };
+      const activeTabId = s.sessions.find((sess) => sess.id === s.activeSessionId)?.tabId ?? s.activeSessionId;
+      if (!activeTabId || !s.tabLayouts[activeTabId]) return {};
+      return {
+        tabLayouts: { ...s.tabLayouts, [activeTabId]: updateRatio(s.tabLayouts[activeTabId], path, ratio) },
+      };
     });
   },
 
