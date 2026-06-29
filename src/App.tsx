@@ -10,7 +10,7 @@ import { useAppStore } from "./store/appStore";
 import { useSettingsStore } from "./store/settingsStore";
 import { updates, UpdateInfo } from "./utils/tauri";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { computePaneLayout, countLeaves } from "./utils/paneTree";
+import { collectLeafSessionIds, computePaneLayout, countLeaves } from "./utils/paneTree";
 import "./styles.css";
 
 export default function App() {
@@ -102,24 +102,51 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Ctrl+PageUp/Down tab cycling — cycles primary sessions only
+  // Tab/pane cycling:
+  //   Ctrl+Tab / Ctrl+Shift+Tab → cycle primary sessions (tabs)
+  //   Ctrl+PageDown / Ctrl+PageUp → cycle panes within the current tab
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!e.ctrlKey) return;
-      if (e.key !== "PageDown" && e.key !== "PageUp") return;
-      const primaries = sessionsRef.current.filter((s) => s.tabId === s.id);
-      if (primaries.length < 2) return;
-      e.preventDefault();
-      const activeTabId = sessionsRef.current.find((s) => s.id === activeIdRef.current)?.tabId ?? activeIdRef.current;
-      const idx = primaries.findIndex((s) => s.id === activeTabId);
-      if (idx === -1) return;
-      const next = e.key === "PageDown"
-        ? (idx + 1) % primaries.length
-        : (idx - 1 + primaries.length) % primaries.length;
-      setActiveSession(primaries[next].id);
+
+      const sessions = sessionsRef.current;
+      const activeTabId = sessions.find((s) => s.id === activeIdRef.current)?.tabId ?? activeIdRef.current;
+
+      if (e.key === "Tab") {
+        // Cycle between tabs (primary sessions).
+        const primaries = sessions.filter((s) => s.tabId === s.id);
+        if (primaries.length < 2) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const idx = primaries.findIndex((s) => s.id === activeTabId);
+        if (idx === -1) return;
+        const next = e.shiftKey
+          ? (idx - 1 + primaries.length) % primaries.length
+          : (idx + 1) % primaries.length;
+        setActiveSession(primaries[next].id);
+      } else if (e.key === "PageDown" || e.key === "PageUp") {
+        // Cycle between panes within the current tab.
+        if (!activeTabId) return;
+        const layout = useAppStore.getState().tabLayouts[activeTabId];
+        if (!layout) return;
+        const panes = collectLeafSessionIds(layout);
+        if (panes.length < 2) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const idx = panes.findIndex((id) => id === activeIdRef.current);
+        if (idx === -1) return;
+        const next = e.key === "PageDown"
+          ? (idx + 1) % panes.length
+          : (idx - 1 + panes.length) % panes.length;
+        setActiveSession(panes[next]);
+      }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    // Capture phase: xterm's textarea calls stopPropagation() on keys it
+    // handles (Tab, PageUp/PageDown), so a bubble-phase window listener never
+    // sees them while a terminal is focused. Capturing at the window runs us
+    // first, before the event reaches the terminal.
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, []);
 
   return (

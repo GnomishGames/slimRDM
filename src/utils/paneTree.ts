@@ -17,6 +17,12 @@ export function firstLeafSessionId(node: PaneNode): string {
   return firstLeafSessionId(node.first);
 }
 
+/** Session ids of every leaf pane, in visual (first→second) order. */
+export function collectLeafSessionIds(node: PaneNode): string[] {
+  if (node.type === "leaf") return [node.sessionId];
+  return [...collectLeafSessionIds(node.first), ...collectLeafSessionIds(node.second)];
+}
+
 export function insertSplit(
   root: PaneNode,
   targetId: string,
