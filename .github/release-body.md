@@ -11,6 +11,10 @@
   <img src="https://img.shields.io/github/downloads/GnomishGames/slimRDM/total?label=downloads" alt="Downloads" />
 </p>
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/GnomishGames/slimRDM/main/docs/images/startup.jpg" width="820" alt="SlimRDM main window — connection sidebar and terminal session" />
+</p>
+
 ---
 
 ## ✨ What's New in __VERSION__
@@ -38,6 +42,11 @@ A fast, no-bloat connection manager for SSH and RDP — built with Rust + Tauri.
 - 🔑 **Credentials** stored in your OS keyring (Keychain / Windows Credential Manager / libsecret)
 - 🗂️ Connection **groups, search & tabs**
 - 🪶 Lightweight native app — Windows, macOS & Linux
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/GnomishGames/slimRDM/main/docs/images/appearance.png" width="370" alt="Appearance settings — themes and terminal options" />
+  <img src="https://raw.githubusercontent.com/GnomishGames/slimRDM/main/docs/images/about.jpg" width="370" alt="About panel — version and tech stack" />
+</p>
 </details>
 
 ---
