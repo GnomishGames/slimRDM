@@ -74,28 +74,22 @@ jobs:
         with:
           arch: x64
 
-      - name: Extract changelog for this release
+      - name: Build release notes
         id: changelog
         shell: bash
         run: |
+          # Extract just this version's notes (between the first two "## [" headers)
+          awk '/^## \[/{count++; if(count==2) exit} count==1 && !/^## \[/{print}' CHANGELOG.md \
+            | grep -v '^---$' \
+            | sed -e 's/[[:space:]]*$//' \
+            | awk 'NF || prev_nf { print } { prev_nf = NF }' > changelog.txt
+          # Splice version + changelog into the release-body template
           {
             echo "body<<CHANGELOG_EOF"
-            awk '/^## \[/{count++; if(count==2) exit} count==1 && !/^## \[/{print}' CHANGELOG.md \
-              | grep -v '^---$' \
-              | sed -e 's/[[:space:]]*$//' \
-              | awk 'NF || prev_nf { print } { prev_nf = NF }'
-            echo ""
-            echo "## Downloads"
-            echo ""
-            echo "| Platform | File | Notes |"
-            echo "|----------|------|-------|"
-            echo "| Linux | \`.deb\` | Debian / Ubuntu |"
-            echo "| Linux | \`.AppImage\` | Universal (any distro) |"
-            echo "| macOS | \`.dmg\` | Universal — Intel + Apple Silicon |"
-            echo "| Windows | \`.exe\` | NSIS installer |"
-            echo ""
-            echo "> **macOS**: builds are unsigned. Right-click → Open on first launch to bypass Gatekeeper."
-            echo '> **Windows**: SmartScreen may warn on first run — click "More info → Run anyway".'
+            awk -v v="$GITHUB_REF_NAME" '
+              /^__CHANGELOG__$/ { while ((getline line < "changelog.txt") > 0) print line; next }
+              { gsub(/__VERSION__/, v); print }
+            ' .github/release-body.md
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
