@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.2] - 2026-06-28
+
+### Fixed
+- **Ctrl+Tab / Ctrl+Shift+Tab tab cycling** — switched to capture-phase keyboard listener so the shortcut works while an xterm terminal is focused.
+- **Ctrl+PageUp / Ctrl+PageDown pane cycling** — cycles panes within the current tab (moved from tab-cycling to pane-cycling; Tab shortcuts now handle tab switching).
+
 ## [1.5.4] - 2026-06-10
 
 ### Fixed
