@@ -32,7 +32,7 @@ Grab the file for your platform from **Assets** below.
 | **macOS** | `.dmg` | Open, drag to Applications. Unsigned → right-click → **Open** on first launch. |
 | **Windows** | `.exe` | Run the installer. SmartScreen may warn → **More info → Run anyway**. |
 
-<details>
+<details open>
 <summary><b>About SlimRDM</b></summary>
 
 A fast, no-bloat connection manager for SSH and RDP — built with Rust + Tauri.
@@ -41,8 +41,12 @@ A fast, no-bloat connection manager for SSH and RDP — built with Rust + Tauri.
 - 🖥️ **RDP** via pure-Rust `ironrdp` — renders straight to canvas, no `xfreerdp`/`mstsc` needed, Wayland-compatible
 - 🔑 **Credentials** stored in your OS keyring (Keychain / Windows Credential Manager / libsecret)
 - 🗂️ Connection **groups, search & tabs**
+- 🔲 **Split panes** — multiple sessions side by side in one tab
 - 🪶 Lightweight native app — Windows, macOS & Linux
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/GnomishGames/slimRDM/main/docs/images/splits.jpg" width="640" alt="Split panes — multiple terminal sessions side by side in one tab" />
+</p>
 <p align="center">
   <img src="https://raw.githubusercontent.com/GnomishGames/slimRDM/main/docs/images/appearance.png" width="370" alt="Appearance settings — themes and terminal options" />
   <img src="https://raw.githubusercontent.com/GnomishGames/slimRDM/main/docs/images/about.jpg" width="370" alt="About panel — version and tech stack" />
