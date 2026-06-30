@@ -40,8 +40,8 @@ A fast, no-bloat connection manager for SSH and RDP — built with Rust + Tauri.
 - 🔐 **SSH** terminal powered by `russh` + xterm.js
 - 🖥️ **RDP** via pure-Rust `ironrdp` — renders straight to canvas, no `xfreerdp`/`mstsc` needed, Wayland-compatible
 - 🔑 **Credentials** stored in your OS keyring (Keychain / Windows Credential Manager / libsecret)
-- 🗂️ Connection **groups, search & tabs**
-- 🔲 **Split panes** — multiple sessions side by side in one tab
+- 🗂️ **Organized sidebar** — group your connections and filter them with instant search
+- 🪟 **Tabs & split panes** — every connection opens in its own tab, and any tab can be split **horizontally or vertically** into multiple panes, so you can watch or work several sessions side by side
 - 🪶 Lightweight native app — Windows, macOS & Linux
 
 <p align="center">
