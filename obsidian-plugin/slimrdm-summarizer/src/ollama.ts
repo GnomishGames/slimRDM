@@ -24,20 +24,25 @@ export async function generate(o: GenerateOptions): Promise<string> {
     body,
     throw: false,
   });
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
       () => reject(new Error(`Ollama request timed out after ${o.timeoutMs} ms`)),
       o.timeoutMs,
-    ),
-  );
+    );
+  });
 
-  const res = await Promise.race([req, timeout]);
-  if (res.status !== 200) {
-    throw new Error(`Ollama returned HTTP ${res.status}`);
+  try {
+    const res = await Promise.race([req, timeout]);
+    if (res.status !== 200) {
+      throw new Error(`Ollama returned HTTP ${res.status}`);
+    }
+    const text: string = (res.json?.response ?? '').trim();
+    if (!text) {
+      throw new Error('Ollama returned an empty response');
+    }
+    return text;
+  } finally {
+    clearTimeout(timer);
   }
-  const text: string = (res.json?.response ?? '').trim();
-  if (!text) {
-    throw new Error('Ollama returned an empty response');
-  }
-  return text;
 }

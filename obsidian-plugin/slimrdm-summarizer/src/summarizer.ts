@@ -141,6 +141,8 @@ export class Summarizer {
       }
       this.setStatus(this.cancelled ? 'Summarization cancelled.' : 'Summarization complete.');
       window.setTimeout(() => this.setStatus(''), 5000);
+    } catch (e) {
+      new Notice(`Summarization error: ${(e as Error).message}`);
     } finally {
       this.running = false;
     }

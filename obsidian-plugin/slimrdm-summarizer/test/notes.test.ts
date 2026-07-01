@@ -193,6 +193,24 @@ more
   assert.match(b, /more/);
 });
 
+test('upsertSummarySection demotes markdown headings inside the summary', () => {
+  const note = `---
+type: claude
+---
+
+## Conversation
+
+x
+`;
+  const out = upsertSummarySection(note, 'Overview\n\n## Details\n\nmore');
+  const summarySec = extractSummarySection(out) ?? '';
+  // The inner heading must be demoted so it can't break the section boundary…
+  assert.doesNotMatch(summarySec, /## Details/);
+  assert.match(summarySec, /Details/);
+  // …and nothing after it is lost when read back (the daily-rollup path).
+  assert.match(summarySec, /more/);
+});
+
 test('stampFrontmatter writes stamp on CRLF frontmatter', () => {
   const crlf = '---\r\ntype: claude\r\n---\r\n\r\n## Conversation\r\n\r\nhi\r\n';
   const out = stampFrontmatter(crlf, { summarizedAt: 'T1' });

@@ -99,7 +99,8 @@ export function truncate(text: string, maxChars: number): string {
 export function upsertSummarySection(content: string, summary: string): string {
   const { raw, body } = splitFrontmatter(content);
   const lines = body.split('\n');
-  const blockLines = ['## Summary', '', summary.trim(), ''];
+  const cleaned = summary.trim().replace(/^#{1,6}[ \t]+/gm, '');
+  const blockLines = ['## Summary', '', cleaned, ''];
   const firstH = lines.findIndex((l) => l.startsWith('## '));
   let out: string[];
   if (firstH !== -1 && lines[firstH].trim() === '## Summary') {
