@@ -1,4 +1,5 @@
 pub mod categories;
+pub mod claude_sessions;
 pub mod clipboard;
 pub mod connections;
 pub mod credentials;
