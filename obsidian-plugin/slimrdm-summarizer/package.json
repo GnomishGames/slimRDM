@@ -9,9 +9,14 @@
     "test": "node --test test/notes.test.ts test/prompts.test.ts",
     "deploy": "npm run build && node scripts/deploy.mjs"
   },
-  "keywords": ["obsidian", "ollama", "slimrdm"],
+  "keywords": [
+    "obsidian",
+    "ollama",
+    "slimrdm"
+  ],
   "license": "MIT",
   "devDependencies": {
+    "@types/node": "^26.0.1",
     "esbuild": "^0.23.0",
     "obsidian": "^1.5.0",
     "typescript": "^5.4.0"
