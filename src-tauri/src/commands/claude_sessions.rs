@@ -20,7 +20,6 @@ pub enum Turn {
 pub struct ClaudeSession {
     pub session_id: String,
     pub project: String,
-    pub cwd: String,
     pub git_branch: Option<String>,
     pub model: Option<String>,
     pub start: DateTime<Local>,
@@ -169,13 +168,51 @@ pub fn parse_session(jsonl: &str) -> Option<ClaudeSession> {
     Some(ClaudeSession {
         session_id: session_id.unwrap_or_else(|| "unknown".to_string()),
         project: project_name(&cwd),
-        cwd,
         git_branch,
         model,
         start: start.unwrap_or(now),
         end: end.unwrap_or(now),
         turns,
     })
+}
+
+/// Filename stem (no extension) for a session note, e.g. `2026-06-25 abc123de`.
+pub fn claude_note_stem(session: &ClaudeSession) -> String {
+    let short: String = session.session_id.chars().take(8).collect();
+    format!("{} {}", session.start.format("%Y-%m-%d"), short)
+}
+
+/// Render a Claude session as a markdown note: frontmatter + conversation.
+pub fn render_claude_note(session: &ClaudeSession) -> String {
+    let mut out = String::from("---\n");
+    out.push_str("type: claude\n");
+    out.push_str(&format!("project: {}\n", session.project));
+    out.push_str(&format!("sessionId: {}\n", session.session_id));
+    if let Some(ref m) = session.model {
+        out.push_str(&format!("model: {}\n", m));
+    }
+    if let Some(ref b) = session.git_branch {
+        out.push_str(&format!("gitBranch: {}\n", b));
+    }
+    out.push_str(&format!("tags: [slimrdm, claude, {}]\n", session.project));
+    out.push_str(&format!("start: {}\n", session.start.format("%Y-%m-%dT%H:%M:%S")));
+    out.push_str(&format!("end: {}\n", session.end.format("%Y-%m-%dT%H:%M:%S")));
+    out.push_str("---\n\n## Conversation\n\n");
+
+    for turn in &session.turns {
+        match turn {
+            Turn::User(t) => out.push_str(&format!("### 🧑 User\n\n{}\n\n", t)),
+            Turn::Assistant(t) => out.push_str(&format!("### 🤖 Claude\n\n{}\n\n", t)),
+            Turn::Tool { name, summary } => {
+                if summary.is_empty() {
+                    out.push_str(&format!("> 🔧 {}\n\n", name));
+                } else {
+                    out.push_str(&format!("> 🔧 {}: {}\n\n", name, summary));
+                }
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -207,6 +244,34 @@ mod tests {
                 Turn::Tool { name: "Edit".into(), summary: "src/main.rs".into() },
             ]
         );
+    }
+
+    #[test]
+    fn stem_uses_date_and_short_id() {
+        let s = parse_session(FIXTURE).unwrap();
+        // Derive expected from the session's own (local-converted) start so the
+        // assertion is timezone-independent.
+        let expected = format!("{} abc123de", s.start.format("%Y-%m-%d"));
+        assert_eq!(claude_note_stem(&s), expected);
+    }
+
+    #[test]
+    fn note_has_frontmatter_and_ordered_conversation() {
+        let s = parse_session(FIXTURE).unwrap();
+        let note = render_claude_note(&s);
+        assert!(note.starts_with("---\n"));
+        assert!(note.contains("type: claude"));
+        assert!(note.contains("project: SlimRdm"));
+        assert!(note.contains("model: claude-opus-4-8"));
+        assert!(note.contains("tags: [slimrdm, claude, SlimRdm]"));
+        // Order: user prompt, then reply, then tool markers.
+        let u = note.find("How do I run tests?").unwrap();
+        let a = note.find("Run cargo test.").unwrap();
+        let tool = note.find("> 🔧 Bash: cargo test --lib").unwrap();
+        assert!(u < a && a < tool);
+        assert!(note.contains("> 🔧 Edit: src/main.rs"));
+        // Internal thinking must never leak into the note.
+        assert!(!note.contains("secret internal"));
     }
 
     #[test]
