@@ -62,9 +62,68 @@ fn strip_escapes(s: &str) -> String {
     s.chars().filter(|&c| c == '\t' || !c.is_control()).collect()
 }
 
+const BUILTIN_PATTERNS: &[&str] = &[
+    r"(?i)(password|passwd|secret|token|api[_-]?key|bearer)\s*[:=]\s*(\S+)",
+    r"AKIA[0-9A-Z]{16}",
+    r"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+];
+
+/// Best-effort redaction. Built-in patterns run first (masking the secret span
+/// with ████), then user-supplied regexes. Invalid user regexes are skipped so
+/// a bad pattern can never break capture.
+pub fn redact(text: &str, user_patterns: &[String]) -> String {
+    let mut out = text.to_string();
+    for pat in BUILTIN_PATTERNS {
+        let re = Regex::new(pat).unwrap();
+        out = re
+            .replace_all(&out, |caps: &regex::Captures| {
+                // When a value group (2) is present, keep the label and mask only the value.
+                if let Some(val) = caps.get(2) {
+                    caps[0].replacen(val.as_str(), "████", 1)
+                } else {
+                    "████".to_string()
+                }
+            })
+            .into_owned();
+    }
+    for pat in user_patterns {
+        if let Ok(re) = Regex::new(pat) {
+            out = re.replace_all(&out, "████").into_owned();
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn redacts_key_value_secrets() {
+        let out = redact("password: hunter2\napikey=ABC123", &[]);
+        assert!(out.contains("████"), "got: {out}");
+        assert!(!out.contains("hunter2"));
+        assert!(!out.contains("ABC123"));
+    }
+
+    #[test]
+    fn redacts_aws_access_key() {
+        let out = redact("key AKIAIOSFODNN7EXAMPLE here", &[]);
+        assert!(!out.contains("AKIAIOSFODNN7EXAMPLE"));
+    }
+
+    #[test]
+    fn applies_user_pattern() {
+        let out = redact("token PRIVATE-XYZ done", &[r"PRIVATE-\w+".to_string()]);
+        assert!(!out.contains("PRIVATE-XYZ"));
+        assert!(out.contains("done"));
+    }
+
+    #[test]
+    fn invalid_user_pattern_is_ignored() {
+        let out = redact("safe text", &["(".to_string()]);
+        assert_eq!(out, "safe text");
+    }
 
     #[test]
     fn strips_sgr_color_codes() {
