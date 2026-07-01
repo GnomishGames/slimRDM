@@ -132,3 +132,69 @@ test('stampFrontmatter adds then replaces keys', () => {
   assert.equal(twice.match(/summarizedAt:/g)?.length, 1);
   assert.match(twice, /summarizedAt: T2/);
 });
+
+test('upsertSummarySection preserves blank lines in untouched sections', () => {
+  const note = `---
+type: ssh
+---
+
+## Transcript
+
+\`\`\`text
+line1
+
+
+
+line2
+\`\`\`
+`;
+  const out = upsertSummarySection(note, 'S.');
+  assert.ok(out.includes('line1\n\n\n\nline2'), out);
+});
+
+test('upsertSummarySection does not treat a ## line in body as the Summary', () => {
+  const note = `---
+type: claude
+---
+
+## Conversation
+
+### 🧑 User
+
+## Not a real section
+
+done
+`;
+  const out = upsertSummarySection(note, 'Real summary.');
+  assert.equal(out.match(/## Summary/g)?.length, 1);
+  const sIdx = out.indexOf('## Summary');
+  const cIdx = out.indexOf('## Conversation');
+  assert.ok(sIdx < cIdx, out);
+  assert.match(out, /## Not a real section/);
+});
+
+test('extractSessionBody keeps ## lines inside the conversation body', () => {
+  const note = `---
+type: claude
+---
+
+## Conversation
+
+### 🧑 User
+
+see below
+
+## Heading in chat
+
+more
+`;
+  const b = extractSessionBody(note, 'claude');
+  assert.match(b, /## Heading in chat/);
+  assert.match(b, /more/);
+});
+
+test('stampFrontmatter writes stamp on CRLF frontmatter', () => {
+  const crlf = '---\r\ntype: claude\r\n---\r\n\r\n## Conversation\r\n\r\nhi\r\n';
+  const out = stampFrontmatter(crlf, { summarizedAt: 'T1' });
+  assert.match(out, /summarizedAt: T1/);
+});

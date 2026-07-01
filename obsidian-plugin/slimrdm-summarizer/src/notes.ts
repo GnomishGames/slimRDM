@@ -1,6 +1,6 @@
 export type NoteType = 'claude' | 'ssh' | 'daily';
 
-const FM_RE = /^---\n([\s\S]*?)\n---\n?/;
+const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
 function splitFrontmatter(content: string): { raw: string; fm: string; body: string } {
   const m = content.match(FM_RE);
@@ -44,14 +44,22 @@ export function isSummarized(fm: Record<string, unknown> | undefined): boolean {
   return !!(fm && fm.summarizedAt);
 }
 
+/** Text from the `## <heading>` line to end of body (the section runs to EOF). */
+function sectionToEnd(body: string, heading: string): string | null {
+  const lines = body.split('\n');
+  const start = lines.findIndex((l) => l.trim() === `## ${heading}`);
+  if (start === -1) return null;
+  return lines.slice(start + 1).join('\n').trim();
+}
+
 export function extractSessionBody(content: string, type: NoteType): string {
   const { body } = splitFrontmatter(content);
   if (type === 'ssh') {
-    const sec = sectionBody(body, 'Transcript') ?? '';
+    const sec = sectionToEnd(body, 'Transcript') ?? '';
     const fence = sec.match(/```(?:text)?\n([\s\S]*?)```/);
     return (fence ? fence[1] : sec).trim();
   }
-  return sectionBody(body, 'Conversation') ?? '';
+  return sectionToEnd(body, 'Conversation') ?? '';
 }
 
 export function extractSummarySection(content: string): string | null {
@@ -92,16 +100,17 @@ export function upsertSummarySection(content: string, summary: string): string {
   const { raw, body } = splitFrontmatter(content);
   const lines = body.split('\n');
   const blockLines = ['## Summary', '', summary.trim(), ''];
-  const range = sectionRange(lines, 'Summary');
+  const firstH = lines.findIndex((l) => l.startsWith('## '));
   let out: string[];
-  if (range) {
-    out = [...lines.slice(0, range[0]), ...blockLines, ...lines.slice(range[1])];
+  if (firstH !== -1 && lines[firstH].trim() === '## Summary') {
+    let end = firstH + 1;
+    while (end < lines.length && !lines[end].startsWith('## ')) end++;
+    out = [...lines.slice(0, firstH), ...blockLines, ...lines.slice(end)];
   } else {
-    const firstH = lines.findIndex((l) => l.startsWith('## '));
     const at = firstH === -1 ? lines.length : firstH;
     out = [...lines.slice(0, at), ...blockLines, ...lines.slice(at)];
   }
-  let bodyOut = out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '');
+  let bodyOut = out.join('\n').replace(/^\n+/, '');
   if (!bodyOut.endsWith('\n')) bodyOut += '\n';
   return raw ? `${raw}\n${bodyOut}` : bodyOut;
 }
