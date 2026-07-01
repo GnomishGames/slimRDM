@@ -286,6 +286,77 @@ pub fn sync_claude_sessions(
     Ok(stats)
 }
 
+/// Frontend-invoked sync ("Sync Claude sessions now"). Resolves `~/.claude/projects`
+/// and the sync-state file; the vault path comes from the caller.
+#[tauri::command]
+pub async fn sync_claude_sessions_cmd(
+    app: tauri::AppHandle,
+    vault_path: String,
+) -> std::result::Result<SyncStats, String> {
+    use tauri::Manager;
+    if vault_path.trim().is_empty() {
+        return Err("No vault path configured".into());
+    }
+    let claude_dir = app
+        .path()
+        .home_dir()
+        .map_err(|e| e.to_string())?
+        .join(".claude")
+        .join("projects");
+    let state_path = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("session-logs")
+        .join("claude-sync-state.json");
+    let vault = PathBuf::from(&vault_path);
+    tokio::task::spawn_blocking(move || sync_claude_sessions(&claude_dir, &vault, &state_path))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
+/// Startup sync: reads `logging.ingestClaude` + `logging.vaultPath` from settings.json and,
+/// if enabled, ingests transcripts on a background thread so boot isn't blocked.
+pub fn sync_on_startup(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    let data_dir = match app.path().app_data_dir() {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+    let content = match std::fs::read_to_string(data_dir.join("settings.json")) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let v: Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    let logging = v.get("logging");
+    let ingest = logging
+        .and_then(|l| l.get("ingestClaude"))
+        .and_then(|b| b.as_bool())
+        .unwrap_or(false);
+    let vault_path = logging
+        .and_then(|l| l.get("vaultPath"))
+        .and_then(|s| s.as_str())
+        .unwrap_or("")
+        .to_string();
+    if !ingest || vault_path.is_empty() {
+        return;
+    }
+    let claude_dir = match app.path().home_dir() {
+        Ok(h) => h.join(".claude").join("projects"),
+        Err(_) => return,
+    };
+    let state_path = data_dir.join("session-logs").join("claude-sync-state.json");
+    std::thread::spawn(move || {
+        if let Err(e) = sync_claude_sessions(&claude_dir, &PathBuf::from(vault_path), &state_path) {
+            log::warn!("claude startup sync failed: {e}");
+        }
+    });
+}
+
 /// Filename stem (no extension) for a session note, e.g. `2026-06-25 abc123de`.
 pub fn claude_note_stem(session: &ClaudeSession) -> String {
     let short: String = session.session_id.chars().take(8).collect();
