@@ -5,7 +5,7 @@ import { useSettingsStore } from "../../store/settingsStore";
 import { credentials, dialog } from "../../utils/tauri";
 import { FolderOpen } from "lucide-react";
 import { Group } from "../../types";
-import { Connection, ConnectionType, AuthType } from "../../types";
+import { Connection, ConnectionType, AuthType, LogMode } from "../../types";
 import clsx from "clsx";
 
 interface Props {
@@ -42,6 +42,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
   const [shellPath, setShellPath] = useState(source?.shellPath ?? "");
   const [startupCommands, setStartupCommands] = useState(source?.startupCommands ?? "");
   const [autoConnect, setAutoConnect] = useState(source?.autoConnect ?? false);
+  const [logSessions, setLogSessions] = useState<LogMode>(source?.logSessions ?? "inherit");
   const [notes, setNotes] = useState(source?.notes ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -131,6 +132,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
           shellPath: isTrm ? shellPath.trim() || undefined : undefined,
           startupCommands: effectiveStartupCommands,
           autoConnect,
+          logSessions,
         });
       } else {
         await addConnection({
@@ -151,6 +153,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
           shellPath: isTrm ? shellPath.trim() || undefined : undefined,
           startupCommands: effectiveStartupCommands,
           autoConnect,
+          logSessions,
         });
       }
       onClose();
@@ -345,6 +348,20 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
             </button>
           </div>
           <p className="field-help">Automatically open this connection when SlimRDM launches.</p>
+
+          {connType !== "rdp" && (
+            <Field label="Log Sessions">
+              <select
+                className="field-input field-select"
+                value={logSessions}
+                onChange={e => setLogSessions(e.target.value as LogMode)}
+              >
+                <option value="inherit">Inherit (group / global default)</option>
+                <option value="on">On</option>
+                <option value="off">Off</option>
+              </select>
+            </Field>
+          )}
 
           {errors._form && <div className="form-error">{errors._form}</div>}
 

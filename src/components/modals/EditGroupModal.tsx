@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { X, FolderOpen } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { credentials, dialog } from "../../utils/tauri";
-import { AuthType, Group } from "../../types";
+import { AuthType, Group, LogMode } from "../../types";
 import clsx from "clsx";
 
 
@@ -20,6 +20,7 @@ export function EditGroupModal({ group, onClose }: Props) {
   const [authType, setAuthType] = useState<AuthType>(group.authType ?? "password");
   const [password, setPassword] = useState("");
   const [privateKeyPath, setPrivateKeyPath] = useState(group.privateKeyPath ?? "");
+  const [logSessions, setLogSessions] = useState<LogMode>(group.logSessions ?? "inherit");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -69,6 +70,7 @@ export function EditGroupModal({ group, onClose }: Props) {
         credentialRef,
         authType: username.trim() ? authType : undefined,
         privateKeyPath: keyPath,
+        logSessions,
       });
       onClose();
     } catch (err) {
@@ -190,6 +192,20 @@ export function EditGroupModal({ group, onClose }: Props) {
               </button>
             </div>
           )}
+
+          <div className="field-section-divider">Session Logging</div>
+
+          <Field label="Log Sessions">
+            <select
+              className="field-input field-select"
+              value={logSessions}
+              onChange={e => setLogSessions(e.target.value as LogMode)}
+            >
+              <option value="inherit">Inherit (global default)</option>
+              <option value="on">On</option>
+              <option value="off">Off</option>
+            </select>
+          </Field>
 
           {errors._form && <div className="form-error">{errors._form}</div>}
 
