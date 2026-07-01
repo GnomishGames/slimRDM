@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Palette, Server, Monitor, Sliders, Database, Info, Github, ExternalLink, Upload, Download, Bug } from "lucide-react";
+import { X, Palette, Server, Monitor, Sliders, Database, Info, Github, ExternalLink, Upload, Download, Bug, FileText, FolderOpen } from "lucide-react";
 import { ReportIssueModal } from "./ReportIssueModal";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
@@ -15,13 +15,14 @@ interface Props {
   onClose: () => void;
 }
 
-type NavSection = "appearance" | "ssh-defaults" | "rdp-defaults" | "behavior" | "data" | "about";
+type NavSection = "appearance" | "ssh-defaults" | "rdp-defaults" | "behavior" | "logging" | "data" | "about";
 
 const NAV: { id: NavSection | string; label: string; icon: React.ReactNode; available: boolean }[] = [
   { id: "appearance",   label: "Appearance",   icon: <Palette size={14} />,  available: true },
   { id: "ssh-defaults", label: "SSH Defaults",  icon: <Server size={14} />,  available: true },
   { id: "rdp-defaults", label: "RDP Defaults",  icon: <Monitor size={14} />, available: true },
   { id: "behavior",     label: "Behavior",      icon: <Sliders size={14} />, available: true },
+  { id: "logging",      label: "Logging",       icon: <FileText size={14} />, available: true },
   { id: "data",         label: "Data",          icon: <Database size={14} />, available: true },
   { id: "about",        label: "About",         icon: <Info size={14} />,    available: true },
 ];
@@ -64,6 +65,7 @@ export function SettingsModal({ onClose }: Props) {
             {activeSection === "ssh-defaults" && <SshDefaultsSection />}
             {activeSection === "rdp-defaults" && <RdpDefaultsSection />}
             {activeSection === "behavior" && <BehaviorSection />}
+            {activeSection === "logging" && <LoggingSection />}
             {activeSection === "data" && <DataSection />}
             {activeSection === "about" && <AboutSection />}
           </div>
@@ -392,6 +394,85 @@ function BehaviorSection() {
           <p className="settings-help-text">{help}</p>
         </div>
       ))}
+    </div>
+  );
+}
+
+function LoggingSection() {
+  const { logging, setLogging } = useSettingsStore();
+  // Keep the textarea's raw text local so pressing Enter for a new line isn't
+  // stripped on each keystroke; commit the parsed pattern list on blur.
+  const [patternsText, setPatternsText] = useState(logging.redactionPatterns.join("\n"));
+
+  const pickVault = async () => {
+    const path = await dialog.pickDirectory("Select Obsidian vault folder");
+    if (path) setLogging({ vaultPath: path as string });
+  };
+
+  const commitPatterns = () =>
+    setLogging({
+      redactionPatterns: patternsText.split("\n").map((s) => s.trim()).filter(Boolean),
+    });
+
+  return (
+    <div className="settings-section">
+      <h3 className="settings-section-title">Logging</h3>
+      <p className="settings-section-desc">
+        Capture SSH sessions as markdown notes in an Obsidian vault, so Obsidian's search and
+        local-LLM plugins can summarise your work. RDP sessions are not logged.
+      </p>
+
+      <div className="settings-group">
+        <label className="settings-row-label">Enable Session Logging</label>
+        <button
+          className={clsx("toggle", logging.enabled && "toggle--on")}
+          onClick={() => setLogging({ enabled: !logging.enabled })}
+          role="switch"
+          aria-checked={logging.enabled}
+        >
+          <span className="toggle-thumb" />
+        </button>
+      </div>
+      <p className="settings-help-text">
+        Global default for connections/groups set to “Inherit”. Individual connections and groups
+        can override this.
+      </p>
+
+      <div className="settings-group settings-group--column" style={{ marginTop: 12 }}>
+        <label className="settings-row-label">Obsidian Vault Folder</label>
+        <p className="settings-help-text">
+          Notes are written to <code>SlimRDM/</code> and <code>Daily/</code> inside this folder.
+          Required for logging to run.
+        </p>
+        <div style={{ display: "flex", gap: 6 }}>
+          <input
+            className="field-input"
+            placeholder="No folder selected"
+            value={logging.vaultPath}
+            onChange={(e) => setLogging({ vaultPath: e.target.value })}
+          />
+          <button className="btn btn--ghost" onClick={pickVault}>
+            <FolderOpen size={13} /> Browse…
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-group settings-group--column" style={{ marginTop: 12 }}>
+        <label className="settings-row-label">Redaction Patterns</label>
+        <p className="settings-help-text">
+          One regular expression per line. Matches are replaced with ████ in saved notes, on top
+          of built-in patterns (passwords, tokens, API keys, private keys). Best-effort — not a
+          guarantee.
+        </p>
+        <textarea
+          className="field-input"
+          rows={4}
+          placeholder={"e.g.\nMY-SECRET-\\w+"}
+          value={patternsText}
+          onChange={(e) => setPatternsText(e.target.value)}
+          onBlur={commitPatterns}
+        />
+      </div>
     </div>
   );
 }
