@@ -4,6 +4,10 @@ Summarizes the session notes SlimRDM writes — Claude Code sessions (primary) a
 sessions (optional) — and rolls each day's per-session summaries into the daily note's
 `## Summary`, using a **local** Ollama model.
 
+> **First-time setup?** Follow **[SETUP.md](SETUP.md)** — the full end-to-end guide
+> (Ollama + SlimRDM logging + plugin install), including the common pitfalls. The
+> quick version is below.
+
 ## Prerequisites
 
 - [Ollama](https://ollama.com) running locally, with a model pulled:
