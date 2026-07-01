@@ -63,6 +63,7 @@ export class Summarizer {
       model: s.model,
       prompt,
       temperature: s.temperature,
+      numCtx: s.numCtx,
       timeoutMs: s.timeoutSec * 1000,
     });
   }

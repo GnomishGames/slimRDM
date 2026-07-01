@@ -1,21 +1,11 @@
 import { requestUrl } from 'obsidian';
+import { buildGenerateBody, type GenerateOptions } from './ollama-body.ts';
 
-export interface GenerateOptions {
-  endpoint: string;
-  model: string;
-  prompt: string;
-  temperature: number;
-  timeoutMs: number;
-}
+export type { GenerateOptions };
 
 export async function generate(o: GenerateOptions): Promise<string> {
   const url = `${o.endpoint.replace(/\/$/, '')}/api/generate`;
-  const body = JSON.stringify({
-    model: o.model,
-    prompt: o.prompt,
-    stream: false,
-    options: { temperature: o.temperature },
-  });
+  const body = JSON.stringify(buildGenerateBody(o));
 
   const req = requestUrl({
     url,

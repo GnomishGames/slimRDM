@@ -1,12 +1,12 @@
 {
   "name": "slimrdm-summarizer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Summarize SlimRDM session notes into Obsidian using a local Ollama model.",
   "type": "module",
   "scripts": {
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs",
-    "test": "node --test test/notes.test.ts test/prompts.test.ts",
+    "test": "node --test test/notes.test.ts test/prompts.test.ts test/ollama.test.ts",
     "deploy": "npm run build && node scripts/deploy.mjs"
   },
   "keywords": [

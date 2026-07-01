@@ -12,6 +12,7 @@ export interface SlimrdmSummarizerSettings {
   scanFolders: string[];
   summarizeSsh: boolean;
   maxChars: number;
+  numCtx: number;
   sessionPrompt: string;
   dailyPrompt: string;
 }
@@ -25,7 +26,8 @@ export const DEFAULT_SETTINGS: SlimrdmSummarizerSettings = {
   startupDelayMs: 5000,
   scanFolders: ['Claude', 'SlimRDM', 'Daily'],
   summarizeSsh: true,
-  maxChars: 12000,
+  maxChars: 40000,
+  numCtx: 16384,
   sessionPrompt: DEFAULT_SESSION_PROMPT,
   dailyPrompt: DEFAULT_DAILY_PROMPT,
 };
@@ -134,6 +136,22 @@ export class SlimrdmSummarizerSettingTab extends PluginSettingTab {
           const n = Number(v);
           if (!Number.isNaN(n) && n > 0) {
             s.maxChars = n;
+            await this.plugin.saveSettings();
+          }
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName('Context window (num_ctx)')
+      .setDesc(
+        'Tokens Ollama keeps in context. Larger fits bigger sessions but uses more VRAM and runs slower. ' +
+          '16384 suits a 14B model on ~16GB VRAM.',
+      )
+      .addText((t) =>
+        t.setValue(String(s.numCtx)).onChange(async (v) => {
+          const n = Number(v);
+          if (!Number.isNaN(n) && n > 0) {
+            s.numCtx = n;
             await this.plugin.saveSettings();
           }
         }),
