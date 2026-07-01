@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { TunnelConfig } from "../types";
+import { TunnelConfig, SessionLogParams } from "../types";
 
 export const ssh = {
   connect: (params: {
@@ -26,6 +26,7 @@ export const ssh = {
       privateKeyPath?: string;
       privateKeyPassphrase?: string;
     };
+    logging?: SessionLogParams;
   }) => invoke("ssh_connect", { params }),
 
   sendInput: (sessionId: string, data: string) =>

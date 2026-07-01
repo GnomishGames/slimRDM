@@ -8,7 +8,7 @@ import { getTheme } from "../utils/terminalThemes";
 import { createLinkHandler } from "../utils/linkHandler";
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
-import { Connection } from "../types";
+import { Connection, SessionLogParams } from "../types";
 
 type ResolvedCreds = {
   username: string;
@@ -52,6 +52,35 @@ function resolveJumpHostParams(conn: Connection): JumpHostParams | undefined {
     authType: creds.authType,
     credentialRef: creds.credentialRef,
     privateKeyPath: creds.privateKeyPath ?? jumpConn.privateKeyPath,
+  };
+}
+
+// Resolve whether this SSH session should be logged, mirroring resolveCredentials:
+// the connection's tri-state wins, then the group's, then the global default.
+// Returns backend log params only when logging is on AND a vault path is configured.
+function resolveLogging(conn: Connection): SessionLogParams | undefined {
+  const { logging } = useSettingsStore.getState();
+  if (!logging.vaultPath) return undefined;
+
+  const group = conn.groupId
+    ? useAppStore.getState().groups.find((g) => g.id === conn.groupId)
+    : undefined;
+
+  let enabled: boolean;
+  if (conn.logSessions === "on") enabled = true;
+  else if (conn.logSessions === "off") enabled = false;
+  else if (group?.logSessions === "on") enabled = true;
+  else if (group?.logSessions === "off") enabled = false;
+  else enabled = logging.enabled;
+
+  if (!enabled) return undefined;
+
+  return {
+    vaultPath: logging.vaultPath,
+    connectionId: conn.id,
+    group: group?.name,
+    tags: ["slimrdm", "ssh", ...(conn.tags ?? [])],
+    redactionPatterns: logging.redactionPatterns,
   };
 }
 
@@ -187,6 +216,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
         initialCols: term?.cols,
         initialRows: term?.rows,
         jumpHostParams,
+        logging: resolveLogging(connection),
       });
     } catch (err) {
       const msg = String(err);
