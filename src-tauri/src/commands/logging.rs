@@ -6,6 +6,221 @@
 
 use chrono::{DateTime, Local};
 use regex::Regex;
+use std::io::Write as _;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+lazy_static::lazy_static! {
+    /// Serialises daily-index updates so concurrent session closes don't corrupt the file.
+    static ref DAILY_LOCK: Mutex<()> = Mutex::new(());
+}
+
+/// Write (or overwrite) the session note at `SlimRDM/<YYYY>/<MM-DD>/<stem>.md`,
+/// returning its path. Writes via a temp file + rename so a crash never leaves a
+/// half-written note.
+pub fn write_session_note(vault: &Path, meta: &NoteMeta, transcript: &str) -> std::io::Result<PathBuf> {
+    let dir = vault
+        .join("SlimRDM")
+        .join(meta.start.format("%Y").to_string())
+        .join(meta.start.format("%m-%d").to_string());
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("{}.md", session_note_stem(meta)));
+    let body = render_session_note(meta, transcript);
+    write_atomic(&path, &body)?;
+    Ok(path)
+}
+
+/// Create `Daily/<YYYY-MM-DD>.md` if missing and append `- [[<stem>]]` under the
+/// Sessions section, deduping. Guarded so concurrent sessions can't clobber it.
+pub fn upsert_daily_index(vault: &Path, meta: &NoteMeta) -> std::io::Result<()> {
+    let _guard = DAILY_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let date = meta.start.format("%Y-%m-%d").to_string();
+    let dir = vault.join("Daily");
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("{date}.md"));
+    let mut body = if path.exists() {
+        std::fs::read_to_string(&path)?
+    } else {
+        daily_note_body(&date)
+    };
+    let link = format!("- [[{}]]", session_note_stem(meta));
+    if !body.contains(&link) {
+        if !body.ends_with('\n') {
+            body.push('\n');
+        }
+        body.push_str(&link);
+        body.push('\n');
+        write_atomic(&path, &body)?;
+    }
+    Ok(())
+}
+
+fn write_atomic(path: &Path, body: &str) -> std::io::Result<()> {
+    let tmp = path.with_extension("md.tmp");
+    std::fs::write(&tmp, body)?;
+    std::fs::rename(&tmp, path)
+}
+
+/// Parameters resolved by the frontend and passed to `ssh_connect` when a
+/// session should be logged. Absent = logging disabled for this session.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionLogParams {
+    pub vault_path: String,
+    pub group: Option<String>,
+    pub tags: Vec<String>,
+    pub redaction_patterns: Vec<String>,
+}
+
+struct Inner {
+    raw_path: PathBuf,
+    raw_file: std::fs::File,
+    vault: PathBuf,
+    meta: NoteMeta,
+    redaction_patterns: Vec<String>,
+    last_output: Instant,
+    last_checkpoint: Instant,
+    dirty: bool,
+    daily_linked: bool,
+}
+
+/// Captures one SSH session's output to a crash-safe raw file and periodically
+/// renders it to a markdown note in the vault. Idle-debounced checkpoints (4s
+/// quiet) with a 90s cap keep writes cheap while bounding data loss.
+pub struct SessionLogger {
+    inner: Arc<Mutex<Inner>>,
+    stop: Arc<AtomicBool>,
+    task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+}
+
+impl SessionLogger {
+    pub fn start(
+        session_id: &str,
+        host: &str,
+        port: u16,
+        username: &str,
+        connection_id: &str,
+        raw_dir: PathBuf,
+        params: SessionLogParams,
+    ) -> std::io::Result<SessionLogger> {
+        std::fs::create_dir_all(&raw_dir)?;
+        let raw_path = raw_dir.join(format!("{session_id}.raw"));
+        let raw_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&raw_path)?;
+        let now = Instant::now();
+        let meta = NoteMeta {
+            host: host.to_string(),
+            port,
+            username: username.to_string(),
+            group: params.group.clone(),
+            connection_id: connection_id.to_string(),
+            tags: params.tags.clone(),
+            start: Local::now(),
+            end: None,
+        };
+        let inner = Arc::new(Mutex::new(Inner {
+            raw_path,
+            raw_file,
+            vault: PathBuf::from(&params.vault_path),
+            meta,
+            redaction_patterns: params.redaction_patterns,
+            last_output: now,
+            last_checkpoint: now,
+            dirty: false,
+            daily_linked: false,
+        }));
+        let stop = Arc::new(AtomicBool::new(false));
+
+        let task = {
+            let inner = inner.clone();
+            let stop = stop.clone();
+            tokio::spawn(async move {
+                let mut tick = tokio::time::interval(Duration::from_secs(1));
+                loop {
+                    tick.tick().await;
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let mut g = match inner.lock() {
+                        Ok(g) => g,
+                        Err(e) => e.into_inner(),
+                    };
+                    let idle = g.last_output.elapsed() >= Duration::from_secs(4);
+                    let capped = g.last_checkpoint.elapsed() >= Duration::from_secs(90);
+                    if g.dirty && (idle || capped) {
+                        if let Err(e) = checkpoint(&mut g, false) {
+                            log::warn!("session log checkpoint failed: {e}");
+                        }
+                    }
+                }
+            })
+        };
+
+        Ok(SessionLogger {
+            inner,
+            stop,
+            task: Mutex::new(Some(task)),
+        })
+    }
+
+    /// Append raw output bytes. Never fails the caller; write errors are logged.
+    pub fn append(&self, bytes: &[u8]) {
+        let mut g = match self.inner.lock() {
+            Ok(g) => g,
+            Err(e) => e.into_inner(),
+        };
+        if let Err(e) = g.raw_file.write_all(bytes).and_then(|_| g.raw_file.flush()) {
+            log::warn!("session log write failed: {e}");
+        }
+        g.last_output = Instant::now();
+        g.dirty = true;
+    }
+
+    /// Stop the checkpoint task, write the final note with end time/duration, and
+    /// delete the raw working file on success.
+    pub async fn finalize(self) {
+        self.stop.store(true, Ordering::Relaxed);
+        let handle = self.task.lock().ok().and_then(|mut t| t.take());
+        if let Some(h) = handle {
+            let _ = h.await;
+        }
+        let mut g = match self.inner.lock() {
+            Ok(g) => g,
+            Err(e) => e.into_inner(),
+        };
+        g.meta.end = Some(Local::now());
+        match checkpoint(&mut g, true) {
+            Ok(()) => {
+                let _ = std::fs::remove_file(&g.raw_path);
+            }
+            Err(e) => log::warn!("session log finalize failed (keeping raw): {e}"),
+        }
+    }
+}
+
+/// Read the accumulated raw capture, clean + redact it, and (re)write the
+/// session note. On first successful write, also add the daily-index link.
+fn checkpoint(inner: &mut Inner, force: bool) -> std::io::Result<()> {
+    if !force && !inner.dirty {
+        return Ok(());
+    }
+    let raw = std::fs::read(&inner.raw_path).unwrap_or_default();
+    let text = String::from_utf8_lossy(&raw);
+    let cleaned = clean(&text);
+    let redacted = redact(&cleaned, &inner.redaction_patterns);
+    write_session_note(&inner.vault, &inner.meta, &redacted)?;
+    if !inner.daily_linked {
+        upsert_daily_index(&inner.vault, &inner.meta)?;
+        inner.daily_linked = true;
+    }
+    inner.dirty = false;
+    inner.last_checkpoint = Instant::now();
+    Ok(())
+}
 
 /// Metadata for a captured session, used to render the note and its filename.
 #[derive(Debug, Clone)]
@@ -89,7 +304,10 @@ pub fn daily_note_body(date: &str) -> String {
 /// remove alt-screen (TUI) regions, apply carriage-return overwrites, strip
 /// ANSI/OSC escapes and stray control chars, and normalise blank lines.
 pub fn clean(raw: &str) -> String {
-    let without_alt = replace_alt_screen(raw);
+    // Normalise CRLF line endings first so the \r in a line terminator isn't
+    // mistaken for a carriage-return overwrite (which would eat the line's text).
+    let normalized = raw.replace("\r\n", "\n");
+    let without_alt = replace_alt_screen(&normalized);
     let mut result: Vec<String> = Vec::new();
     let mut blanks = 0;
     for segment in without_alt.split('\n') {
@@ -192,6 +410,61 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn logger_writes_note_and_deletes_raw() {
+        let base = std::env::temp_dir().join(format!("slimrdm-test-{}", uuid::Uuid::new_v4()));
+        let raw_dir = base.join("raw");
+        let vault = base.join("vault");
+        let params = SessionLogParams {
+            vault_path: vault.to_string_lossy().into_owned(),
+            group: None,
+            tags: vec!["slimrdm".into(), "ssh".into()],
+            redaction_patterns: vec![],
+        };
+        let logger =
+            SessionLogger::start("sess1", "web01", 22, "deploy", "cid", raw_dir.clone(), params)
+                .unwrap();
+        logger.append(b"echo hi\r\nhi\r\n");
+        logger.finalize().await;
+
+        let now = chrono::Local::now();
+        let dir = vault
+            .join("SlimRDM")
+            .join(now.format("%Y").to_string())
+            .join(now.format("%m-%d").to_string());
+        let md = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .find(|e| e.path().extension().map_or(false, |x| x == "md"))
+            .expect("a session note was written");
+        let body = std::fs::read_to_string(md.path()).unwrap();
+        assert!(body.contains("hi"), "note body: {body}");
+        assert!(!raw_dir.join("sess1.raw").exists(), "raw file should be deleted");
+
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn writes_session_note_to_dated_path() {
+        let vault = std::env::temp_dir().join(format!("slimrdm-test-{}", uuid::Uuid::new_v4()));
+        let p = write_session_note(&vault, &fixed_meta(), "hello").unwrap();
+        assert!(p.ends_with("SlimRDM/2026/06-30/2026-06-30 web01 (14-02).md"));
+        let body = std::fs::read_to_string(&p).unwrap();
+        assert!(body.contains("hello"));
+        std::fs::remove_dir_all(&vault).ok();
+    }
+
+    #[test]
+    fn daily_index_creates_and_dedupes() {
+        let vault = std::env::temp_dir().join(format!("slimrdm-test-{}", uuid::Uuid::new_v4()));
+        upsert_daily_index(&vault, &fixed_meta()).unwrap();
+        upsert_daily_index(&vault, &fixed_meta()).unwrap();
+        let daily = vault.join("Daily/2026-06-30.md");
+        let body = std::fs::read_to_string(&daily).unwrap();
+        assert_eq!(body.matches("[[2026-06-30 web01 (14-02)]]").count(), 1);
+        std::fs::remove_dir_all(&vault).ok();
+    }
+
     #[test]
     fn session_stem_uses_host_and_start_time() {
         assert_eq!(session_note_stem(&fixed_meta()), "2026-06-30 web01 (14-02)");
@@ -250,6 +523,11 @@ mod tests {
     #[test]
     fn collapses_carriage_return_overwrites() {
         assert_eq!(clean("10%\r50%\r100%\n"), "100%");
+    }
+
+    #[test]
+    fn treats_crlf_as_newline_not_overwrite() {
+        assert_eq!(clean("echo hi\r\nhi\r\n"), "echo hi\nhi");
     }
 
     #[test]
