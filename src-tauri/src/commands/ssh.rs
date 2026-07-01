@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +12,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 
 use crate::store::AuthType;
 use crate::commands::tunnel_utils::{JumpHostParams, open_jump_channel};
+use crate::commands::logging::{SessionLogParams, SessionLogger};
 
 /// Shared map of session_id -> input sender
 type SshSessions = Arc<Mutex<HashMap<String, mpsc::UnboundedSender<SshInput>>>>;
@@ -44,6 +45,7 @@ pub struct SshConnectParams {
     pub initial_rows: Option<u16>,
     pub startup_commands: Option<String>,
     pub jump_host_params: Option<JumpHostParams>,
+    pub logging: Option<SessionLogParams>,
 }
 
 /// Emitted to frontend for terminal output
@@ -83,7 +85,33 @@ pub async fn ssh_connect(app: AppHandle, params: SshConnectParams) -> std::resul
             message: None,
         });
 
-        match run_ssh_session(&app_clone, &params, &mut input_rx).await {
+        // Set up session logging if the frontend resolved it on for this connection.
+        // Failures here never affect the SSH session — we log and carry on unlogged.
+        let logger: Option<Arc<SessionLogger>> = match &params.logging {
+            Some(log_params) => match app_clone.path().app_local_data_dir() {
+                Ok(dir) => match SessionLogger::start(
+                    &params.session_id,
+                    &params.host,
+                    params.port,
+                    &params.username,
+                    dir.join("session-logs"),
+                    log_params.clone(),
+                ) {
+                    Ok(l) => Some(Arc::new(l)),
+                    Err(e) => {
+                        log::warn!("could not start session logger: {e}");
+                        None
+                    }
+                },
+                Err(e) => {
+                    log::warn!("no app data dir for session logging: {e}");
+                    None
+                }
+            },
+            None => None,
+        };
+
+        match run_ssh_session(&app_clone, &params, &mut input_rx, logger.clone()).await {
             Ok(true) => {
                 // Graceful exit — user typed `exit` (channel_eof fired)
                 let _ = app_clone.emit("ssh-status", SshStatusEvent {
@@ -104,6 +132,11 @@ pub async fn ssh_connect(app: AppHandle, params: SshConnectParams) -> std::resul
             }
         }
 
+        // Finalize the session log (write final note, delete raw). No-op if unlogged.
+        if let Some(l) = &logger {
+            l.finalize().await;
+        }
+
         // Cleanup
         let mut sessions = SESSIONS.lock().unwrap();
         sessions.remove(&session_id);
@@ -116,6 +149,7 @@ async fn run_ssh_session(
     app: &AppHandle,
     params: &SshConnectParams,
     input_rx: &mut mpsc::UnboundedReceiver<SshInput>,
+    logger: Option<Arc<SessionLogger>>,
 ) -> std::result::Result<bool, String> {
     use russh::*;
     use russh_keys::*;
@@ -181,6 +215,7 @@ async fn run_ssh_session(
         session_id: String,
         app: AppHandle,
         close_tx: mpsc::UnboundedSender<()>,
+        logger: Option<Arc<SessionLogger>>,
     }
 
     #[async_trait::async_trait]
@@ -216,6 +251,9 @@ async fn run_ssh_session(
                 session_id: self.session_id.clone(),
                 data: text,
             });
+            if let Some(l) = &self.logger {
+                l.append(data);
+            }
             Ok(())
         }
 
@@ -234,6 +272,7 @@ async fn run_ssh_session(
         session_id: session_id.clone(),
         app: app_emit,
         close_tx,
+        logger: logger.clone(),
     };
 
     ssh_log(&format!(

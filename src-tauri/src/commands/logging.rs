@@ -65,10 +65,11 @@ fn write_atomic(path: &Path, body: &str) -> std::io::Result<()> {
 
 /// Parameters resolved by the frontend and passed to `ssh_connect` when a
 /// session should be logged. Absent = logging disabled for this session.
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionLogParams {
     pub vault_path: String,
+    pub connection_id: String,
     pub group: Option<String>,
     pub tags: Vec<String>,
     pub redaction_patterns: Vec<String>,
@@ -101,7 +102,6 @@ impl SessionLogger {
         host: &str,
         port: u16,
         username: &str,
-        connection_id: &str,
         raw_dir: PathBuf,
         params: SessionLogParams,
     ) -> std::io::Result<SessionLogger> {
@@ -117,7 +117,7 @@ impl SessionLogger {
             port,
             username: username.to_string(),
             group: params.group.clone(),
-            connection_id: connection_id.to_string(),
+            connection_id: params.connection_id.clone(),
             tags: params.tags.clone(),
             start: Local::now(),
             end: None,
@@ -181,10 +181,14 @@ impl SessionLogger {
     }
 
     /// Stop the checkpoint task, write the final note with end time/duration, and
-    /// delete the raw working file on success.
-    pub async fn finalize(self) {
-        self.stop.store(true, Ordering::Relaxed);
+    /// delete the raw working file on success. Idempotent: a second call is a
+    /// no-op because the task handle has already been taken.
+    pub async fn finalize(&self) {
         let handle = self.task.lock().ok().and_then(|mut t| t.take());
+        if handle.is_none() {
+            return;
+        }
+        self.stop.store(true, Ordering::Relaxed);
         if let Some(h) = handle {
             let _ = h.await;
         }
@@ -417,13 +421,13 @@ mod tests {
         let vault = base.join("vault");
         let params = SessionLogParams {
             vault_path: vault.to_string_lossy().into_owned(),
+            connection_id: "cid".into(),
             group: None,
             tags: vec!["slimrdm".into(), "ssh".into()],
             redaction_patterns: vec![],
         };
         let logger =
-            SessionLogger::start("sess1", "web01", 22, "deploy", "cid", raw_dir.clone(), params)
-                .unwrap();
+            SessionLogger::start("sess1", "web01", 22, "deploy", raw_dir.clone(), params).unwrap();
         logger.append(b"echo hi\r\nhi\r\n");
         logger.finalize().await;
 
