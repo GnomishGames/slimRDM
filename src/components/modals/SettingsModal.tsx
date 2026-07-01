@@ -8,7 +8,7 @@ import { useAppStore } from "../../store/appStore";
 import { TERMINAL_THEMES, FONT_FAMILIES } from "../../utils/terminalThemes";
 import { APP_THEMES } from "../../utils/appThemes";
 import { CursorStyle, RdpDefaults } from "../../types";
-import { dialog, data, updates, UpdateInfo } from "../../utils/tauri";
+import { dialog, data, updates, claude, UpdateInfo } from "../../utils/tauri";
 import clsx from "clsx";
 
 interface Props {
@@ -403,10 +403,28 @@ function LoggingSection() {
   // Keep the textarea's raw text local so pressing Enter for a new line isn't
   // stripped on each keystroke; commit the parsed pattern list on blur.
   const [patternsText, setPatternsText] = useState(logging.redactionPatterns.join("\n"));
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
 
   const pickVault = async () => {
     const path = await dialog.pickDirectory("Select Obsidian vault folder");
     if (path) setLogging({ vaultPath: path as string });
+  };
+
+  const syncClaude = async () => {
+    setSyncing(true);
+    setSyncStatus(null);
+    try {
+      const stats = await claude.sync(logging.vaultPath);
+      setSyncStatus({
+        type: "ok",
+        msg: `Scanned ${stats.scanned} session(s), wrote ${stats.written} note(s).`,
+      });
+    } catch (err) {
+      setSyncStatus({ type: "err", msg: String(err) });
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const commitPatterns = () =>
@@ -472,6 +490,44 @@ function LoggingSection() {
           onChange={(e) => setPatternsText(e.target.value)}
           onBlur={commitPatterns}
         />
+      </div>
+
+      <h3 className="settings-section-title" style={{ marginTop: 24 }}>Claude Session Journal</h3>
+      <p className="settings-section-desc">
+        Ingest Claude Code transcripts from <code>~/.claude/projects</code> into the vault as
+        markdown notes, so past sessions are searchable alongside your SSH logs.
+      </p>
+
+      <div className="settings-group">
+        <label className="settings-row-label">Ingest Claude Sessions on Startup</label>
+        <button
+          className={clsx("toggle", logging.ingestClaude && "toggle--on")}
+          onClick={() => setLogging({ ingestClaude: !logging.ingestClaude })}
+          role="switch"
+          aria-checked={logging.ingestClaude}
+        >
+          <span className="toggle-thumb" />
+        </button>
+      </div>
+      <p className="settings-help-text">
+        When enabled, transcripts are synced in the background each time SlimRDM launches. Requires
+        a vault folder above. You can also sync on demand below.
+      </p>
+
+      <div className="settings-group settings-group--column" style={{ marginTop: 12 }}>
+        <button
+          className="btn btn--ghost"
+          onClick={syncClaude}
+          disabled={syncing || !logging.vaultPath}
+          style={{ alignSelf: "flex-start" }}
+        >
+          <FileText size={13} /> {syncing ? "Syncing…" : "Sync Claude sessions now"}
+        </button>
+        {syncStatus && (
+          <p className={clsx("data-status", syncStatus.type === "err" && "data-status--err")}>
+            {syncStatus.msg}
+          </p>
+        )}
       </div>
     </div>
   );

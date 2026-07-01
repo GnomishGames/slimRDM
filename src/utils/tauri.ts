@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { TunnelConfig, SessionLogParams } from "../types";
+import { TunnelConfig, SessionLogParams, SyncStats } from "../types";
 
 export const ssh = {
   connect: (params: {
@@ -137,6 +137,10 @@ export interface UpdateInfo {
 export const updates = {
   check: () => invoke<UpdateInfo>("check_for_updates"),
   install: (url: string) => invoke<void>("download_and_install_update", { url }),
+};
+
+export const claude = {
+  sync: (vaultPath: string) => invoke<SyncStats>("sync_claude_sessions_cmd", { vaultPath }),
 };
 
 export const credentials = {

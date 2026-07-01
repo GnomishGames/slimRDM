@@ -37,6 +37,7 @@ export const DEFAULT_LOGGING: LoggingSettings = {
   enabled: false,
   vaultPath: "",
   redactionPatterns: [],
+  ingestClaude: false,
 };
 
 export const DEFAULT_TERMINAL: TerminalSettings = {

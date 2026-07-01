@@ -117,6 +117,13 @@ export interface LoggingSettings {
   enabled: boolean;
   vaultPath: string;
   redactionPatterns: string[];
+  ingestClaude: boolean;
+}
+
+/// Result of a Claude session sync run.
+export interface SyncStats {
+  scanned: number;
+  written: number;
 }
 
 /// Resolved logging parameters sent to the backend on connect.
