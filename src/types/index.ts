@@ -1,5 +1,6 @@
 export type ConnectionType = "ssh" | "rdp" | "trm";
 export type AuthType = "password" | "public_key" | "agent";
+export type LogMode = "inherit" | "on" | "off";
 export type SessionStatus = "connecting" | "connected" | "disconnected" | "error";
 export type CursorStyle = "block" | "bar" | "underline";
 
@@ -33,6 +34,7 @@ export interface Connection {
   shellPath?: string;
   startupCommands?: string;
   autoConnect?: boolean;
+  logSessions?: LogMode;
 }
 
 export interface Category {
@@ -51,6 +53,7 @@ export interface Group {
   authType?: AuthType;
   privateKeyPath?: string;
   categoryId?: string;
+  logSessions?: LogMode;
 }
 
 export interface Session {
@@ -110,6 +113,28 @@ export interface BehaviorSettings {
   autoReconnect: boolean;
 }
 
+export interface LoggingSettings {
+  enabled: boolean;
+  vaultPath: string;
+  redactionPatterns: string[];
+  ingestClaude: boolean;
+}
+
+/// Result of a Claude session sync run.
+export interface SyncStats {
+  scanned: number;
+  written: number;
+}
+
+/// Resolved logging parameters sent to the backend on connect.
+export interface SessionLogParams {
+  vaultPath: string;
+  connectionId: string;
+  group?: string;
+  tags: string[];
+  redactionPatterns: string[];
+}
+
 export type TunnelStatus = "connecting" | "active" | "stopped" | "error";
 
 export interface TunnelConfig {
@@ -144,4 +169,5 @@ export interface NewConnectionForm {
   shellPath?: string;
   startupCommands?: string;
   autoConnect?: boolean;
+  logSessions?: LogMode;
 }

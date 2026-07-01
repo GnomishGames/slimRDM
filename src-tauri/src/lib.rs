@@ -34,8 +34,10 @@ pub fn run() {
             store::init(app.handle())?;
             if let Ok(data_dir) = app.path().app_data_dir() {
                 commands::known_hosts::init(data_dir.clone());
+                commands::logging::sweep_orphans(&data_dir.join("session-logs"));
                 init_logger(data_dir);
             }
+            commands::claude_sessions::sync_on_startup(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -96,6 +98,8 @@ pub fn run() {
             // Updates
             commands::updates::check_for_updates,
             commands::updates::download_and_install_update,
+            // Claude session journal
+            commands::claude_sessions::sync_claude_sessions_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SlimRDM");

@@ -1,10 +1,12 @@
 pub mod categories;
+pub mod claude_sessions;
 pub mod clipboard;
 pub mod connections;
 pub mod credentials;
 pub mod data;
 pub mod groups;
 pub mod known_hosts;
+pub mod logging;
 pub mod rdp;
 pub mod ssh;
 pub mod trm;

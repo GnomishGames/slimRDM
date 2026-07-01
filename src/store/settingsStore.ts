@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { Store } from "@tauri-apps/plugin-store";
-import { TerminalSettings, SshDefaults, RdpDefaults, BehaviorSettings } from "../types";
+import { TerminalSettings, SshDefaults, RdpDefaults, BehaviorSettings, LoggingSettings } from "../types";
 import { applyAppTheme } from "../utils/appThemes";
 
 export const DEFAULT_SSH_DEFAULTS: SshDefaults = {
@@ -33,6 +33,13 @@ export const DEFAULT_BEHAVIOR: BehaviorSettings = {
   autoReconnect: false,
 };
 
+export const DEFAULT_LOGGING: LoggingSettings = {
+  enabled: false,
+  vaultPath: "",
+  redactionPatterns: [],
+  ingestClaude: false,
+};
+
 export const DEFAULT_TERMINAL: TerminalSettings = {
   fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace",
   fontSize: 13,
@@ -48,6 +55,7 @@ interface SettingsState {
   sshDefaults: SshDefaults;
   rdpDefaults: RdpDefaults;
   behavior: BehaviorSettings;
+  logging: LoggingSettings;
   load: () => Promise<void>;
   setTerminal: (patch: Partial<TerminalSettings>) => void;
   setAppTheme: (theme: string) => void;
@@ -55,6 +63,7 @@ interface SettingsState {
   setRdpDefaults: (patch: Partial<RdpDefaults>) => void;
   setRdpPerformanceFlags: (patch: Partial<RdpDefaults["performanceFlags"]>) => void;
   setBehavior: (patch: Partial<BehaviorSettings>) => void;
+  setLogging: (patch: Partial<LoggingSettings>) => void;
 }
 
 let _store: Store | null = null;
@@ -69,6 +78,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   sshDefaults: DEFAULT_SSH_DEFAULTS,
   rdpDefaults: DEFAULT_RDP_DEFAULTS,
   behavior: DEFAULT_BEHAVIOR,
+  logging: DEFAULT_LOGGING,
 
   load: async () => {
     const s = await getStore();
@@ -77,10 +87,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const savedSshDefaults = await s.get<SshDefaults>("sshDefaults");
     const savedRdpDefaults = await s.get<RdpDefaults>("rdpDefaults");
     const savedBehavior = await s.get<BehaviorSettings>("behavior");
+    const savedLogging = await s.get<LoggingSettings>("logging");
     if (savedTerminal) set({ terminal: { ...DEFAULT_TERMINAL, ...savedTerminal } });
     if (savedSshDefaults) set({ sshDefaults: { ...DEFAULT_SSH_DEFAULTS, ...savedSshDefaults } });
     if (savedRdpDefaults) set({ rdpDefaults: { ...DEFAULT_RDP_DEFAULTS, ...savedRdpDefaults } });
     if (savedBehavior) set({ behavior: { ...DEFAULT_BEHAVIOR, ...savedBehavior } });
+    if (savedLogging) set({ logging: { ...DEFAULT_LOGGING, ...savedLogging } });
     const appTheme = savedAppTheme ?? "github-dark";
     set({ appTheme });
     applyAppTheme(appTheme);
@@ -121,5 +133,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const next = { ...get().behavior, ...patch };
     set({ behavior: next });
     getStore().then((s) => { s.set("behavior", next); s.save(); });
+  },
+
+  setLogging: (patch) => {
+    const next = { ...get().logging, ...patch };
+    set({ logging: next });
+    getStore().then((s) => { s.set("logging", next); s.save(); });
   },
 }));

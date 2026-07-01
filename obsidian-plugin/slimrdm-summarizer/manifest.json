@@ -1,0 +1,9 @@
+{
+  "id": "slimrdm-summarizer",
+  "name": "SlimRDM Summarizer",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Summarizes SlimRDM session notes (Claude Code + SSH) and daily rollups using a local Ollama model.",
+  "author": "GnomishGames",
+  "isDesktopOnly": true
+}
