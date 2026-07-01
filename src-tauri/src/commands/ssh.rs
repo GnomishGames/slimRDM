@@ -88,7 +88,7 @@ pub async fn ssh_connect(app: AppHandle, params: SshConnectParams) -> std::resul
         // Set up session logging if the frontend resolved it on for this connection.
         // Failures here never affect the SSH session — we log and carry on unlogged.
         let logger: Option<Arc<SessionLogger>> = match &params.logging {
-            Some(log_params) => match app_clone.path().app_local_data_dir() {
+            Some(log_params) => match app_clone.path().app_data_dir() {
                 Ok(dir) => match SessionLogger::start(
                     &params.session_id,
                     &params.host,

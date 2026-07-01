@@ -63,6 +63,20 @@ fn write_atomic(path: &Path, body: &str) -> std::io::Result<()> {
     std::fs::rename(&tmp, path)
 }
 
+/// Delete leftover `*.raw` capture files in the session-logs dir. These only
+/// exist after a crash; their content is unredacted and their note was already
+/// checkpointed, so they are safe to remove on startup. Silent if the dir is absent.
+pub fn sweep_orphans(raw_dir: &Path) {
+    if let Ok(entries) = std::fs::read_dir(raw_dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.extension().map_or(false, |x| x == "raw") {
+                let _ = std::fs::remove_file(&p);
+            }
+        }
+    }
+}
+
 /// Parameters resolved by the frontend and passed to `ssh_connect` when a
 /// session should be logged. Absent = logging disabled for this session.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -446,6 +460,20 @@ mod tests {
         assert!(!raw_dir.join("sess1.raw").exists(), "raw file should be deleted");
 
         std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn sweep_removes_raw_files_but_keeps_notes() {
+        let dir = std::env::temp_dir().join(format!("slimrdm-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.raw"), b"x").unwrap();
+        std::fs::write(dir.join("b.raw"), b"y").unwrap();
+        std::fs::write(dir.join("keep.md"), b"z").unwrap();
+        sweep_orphans(&dir);
+        assert!(!dir.join("a.raw").exists());
+        assert!(!dir.join("b.raw").exists());
+        assert!(dir.join("keep.md").exists());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

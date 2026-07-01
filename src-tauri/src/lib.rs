@@ -34,6 +34,7 @@ pub fn run() {
             store::init(app.handle())?;
             if let Ok(data_dir) = app.path().app_data_dir() {
                 commands::known_hosts::init(data_dir.clone());
+                commands::logging::sweep_orphans(&data_dir.join("session-logs"));
                 init_logger(data_dir);
             }
             Ok(())
