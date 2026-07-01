@@ -6,6 +6,7 @@
 
 use chrono::{DateTime, Local};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::commands::logging::{upsert_daily_section, write_atomic};
@@ -193,6 +194,98 @@ pub fn write_claude_note(vault: &Path, session: &ClaudeSession) -> std::io::Resu
     Ok(path)
 }
 
+/// Result of a sync run, returned to the frontend.
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncStats {
+    pub scanned: usize,
+    pub written: usize,
+}
+
+/// Top-level session transcripts under `<claude_dir>/<project>/<uuid>.jsonl`.
+/// Skips nested `subagents/` dirs by only reading files directly in each project dir.
+fn discover_transcripts(claude_dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(projects) = std::fs::read_dir(claude_dir) {
+        for proj in projects.flatten() {
+            if !proj.path().is_dir() {
+                continue;
+            }
+            if let Ok(files) = std::fs::read_dir(proj.path()) {
+                for f in files.flatten() {
+                    let p = f.path();
+                    if p.is_file() && p.extension().map_or(false, |x| x == "jsonl") {
+                        out.push(p);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+fn mtime_secs(p: &Path) -> u64 {
+    std::fs::metadata(p)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn load_state(path: &Path) -> HashMap<String, u64> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_state(path: &Path, state: &HashMap<String, u64>) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(s) = serde_json::to_string(state) {
+        let _ = std::fs::write(path, s);
+    }
+}
+
+/// Ingest all changed/new Claude transcripts under `claude_dir` into the vault. Uses a
+/// `file → mtime` state file to skip unchanged transcripts. Non-fatal per file: an
+/// unreadable/unparseable transcript is skipped (and recorded so it isn't retried).
+pub fn sync_claude_sessions(
+    claude_dir: &Path,
+    vault: &Path,
+    state_path: &Path,
+) -> std::io::Result<SyncStats> {
+    let mut state = load_state(state_path);
+    let mut stats = SyncStats::default();
+    for f in discover_transcripts(claude_dir) {
+        stats.scanned += 1;
+        let key = f.to_string_lossy().to_string();
+        let mtime = mtime_secs(&f);
+        if state.get(&key) == Some(&mtime) {
+            continue;
+        }
+        match std::fs::read_to_string(&f) {
+            Ok(content) => match parse_session(&content) {
+                Some(session) => {
+                    if write_claude_note(vault, &session).is_ok() {
+                        stats.written += 1;
+                        state.insert(key, mtime);
+                    }
+                }
+                None => {
+                    // No renderable turns — record so we don't reparse every run.
+                    state.insert(key, mtime);
+                }
+            },
+            Err(e) => log::warn!("claude sync: could not read {}: {e}", f.display()),
+        }
+    }
+    save_state(state_path, &state);
+    Ok(stats)
+}
+
 /// Filename stem (no extension) for a session note, e.g. `2026-06-25 abc123de`.
 pub fn claude_note_stem(session: &ClaudeSession) -> String {
     let short: String = session.session_id.chars().take(8).collect();
@@ -304,6 +397,33 @@ mod tests {
         assert!(daily.contains("## Claude Sessions"));
         assert!(daily.contains(&format!("[[{}]]", claude_note_stem(&s))));
         std::fs::remove_dir_all(&vault).ok();
+    }
+
+    #[test]
+    fn sync_writes_then_skips_unchanged_then_rerenders() {
+        let base = std::env::temp_dir().join(format!("slimrdm-test-{}", uuid::Uuid::new_v4()));
+        let claude = base.join("projects");
+        let proj = claude.join("C--apps-Foo");
+        std::fs::create_dir_all(&proj).unwrap();
+        let f = proj.join("sess.jsonl");
+        std::fs::write(&f, FIXTURE).unwrap();
+        let vault = base.join("vault");
+        let state = base.join("session-logs/claude-sync-state.json");
+
+        let s1 = sync_claude_sessions(&claude, &vault, &state).unwrap();
+        assert_eq!((s1.scanned, s1.written), (1, 1));
+
+        // Unchanged mtime → nothing re-written.
+        let s2 = sync_claude_sessions(&claude, &vault, &state).unwrap();
+        assert_eq!((s2.scanned, s2.written), (1, 0));
+
+        // Touch (new mtime) → re-rendered.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        std::fs::write(&f, FIXTURE).unwrap();
+        let s3 = sync_claude_sessions(&claude, &vault, &state).unwrap();
+        assert_eq!(s3.written, 1);
+
+        std::fs::remove_dir_all(&base).ok();
     }
 
     #[test]
