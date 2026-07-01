@@ -32,32 +32,75 @@ pub fn write_session_note(vault: &Path, meta: &NoteMeta, transcript: &str) -> st
     Ok(path)
 }
 
-/// Create `Daily/<YYYY-MM-DD>.md` if missing and append `- [[<stem>]]` under the
-/// Sessions section, deduping. Guarded so concurrent sessions can't clobber it.
+/// Create `Daily/<YYYY-MM-DD>.md` if missing and add `- [[<stem>]]` under the SSH
+/// `## Sessions` section, deduping.
 pub fn upsert_daily_index(vault: &Path, meta: &NoteMeta) -> std::io::Result<()> {
-    let _guard = DAILY_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let date = meta.start.format("%Y-%m-%d").to_string();
+    upsert_daily_section(vault, &date, "Sessions", &session_note_stem(meta))
+}
+
+/// Create `Daily/<date>.md` if missing and add `- [[<link_stem>]]` under the named
+/// `## <section_title>` section (creating the section if absent), deduping. Guarded so
+/// concurrent writers can't clobber the file, and section-aware so different sources
+/// (SSH `Sessions`, `Claude Sessions`) don't cross-contaminate.
+pub fn upsert_daily_section(
+    vault: &Path,
+    date: &str,
+    section_title: &str,
+    link_stem: &str,
+) -> std::io::Result<()> {
+    let _guard = DAILY_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = vault.join("Daily");
     std::fs::create_dir_all(&dir)?;
     let path = dir.join(format!("{date}.md"));
     let mut body = if path.exists() {
         std::fs::read_to_string(&path)?
     } else {
-        daily_note_body(&date)
+        daily_note_body(date)
     };
-    let link = format!("- [[{}]]", session_note_stem(meta));
-    if !body.contains(&link) {
-        if !body.ends_with('\n') {
-            body.push('\n');
-        }
-        body.push_str(&link);
-        body.push('\n');
-        write_atomic(&path, &body)?;
+    let link = format!("- [[{link_stem}]]");
+    if body.contains(&link) {
+        return Ok(());
     }
-    Ok(())
+    body = insert_link_in_section(&body, &format!("## {section_title}"), &link);
+    write_atomic(&path, &body)
 }
 
-fn write_atomic(path: &Path, body: &str) -> std::io::Result<()> {
+/// Insert `link` at the end of the `header` section (delimited by `## ` lines),
+/// creating the section at the document end if it doesn't exist yet.
+fn insert_link_in_section(body: &str, header: &str, link: &str) -> String {
+    let mut lines: Vec<String> = body.lines().map(|s| s.to_string()).collect();
+    match lines.iter().position(|l| l.trim_end() == header) {
+        Some(h) => {
+            // End of this section = next "## " header after it, else EOF.
+            let mut end = h + 1;
+            while end < lines.len() && !lines[end].trim_start().starts_with("## ") {
+                end += 1;
+            }
+            // Insert after the last non-blank line inside the section.
+            let mut ins = end;
+            while ins > h + 1 && lines[ins - 1].trim().is_empty() {
+                ins -= 1;
+            }
+            lines.insert(ins, link.to_string());
+        }
+        None => {
+            if lines.last().map_or(false, |l| !l.is_empty()) {
+                lines.push(String::new());
+            }
+            lines.push(header.to_string());
+            lines.push(String::new());
+            lines.push(link.to_string());
+        }
+    }
+    let mut out = lines.join("\n");
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out
+}
+
+pub fn write_atomic(path: &Path, body: &str) -> std::io::Result<()> {
     let tmp = path.with_extension("md.tmp");
     std::fs::write(&tmp, body)?;
     std::fs::rename(&tmp, path)
@@ -494,6 +537,22 @@ mod tests {
         let daily = vault.join("Daily/2026-06-30.md");
         let body = std::fs::read_to_string(&daily).unwrap();
         assert_eq!(body.matches("[[2026-06-30 web01 (14-02)]]").count(), 1);
+        std::fs::remove_dir_all(&vault).ok();
+    }
+
+    #[test]
+    fn daily_sections_coexist_without_crosstalk() {
+        let vault = std::env::temp_dir().join(format!("slimrdm-test-{}", uuid::Uuid::new_v4()));
+        upsert_daily_section(&vault, "2026-06-30", "Sessions", "ssh-note").unwrap();
+        upsert_daily_section(&vault, "2026-06-30", "Claude Sessions", "claude-note").unwrap();
+        // A second SSH link must land under Sessions, not appended at EOF.
+        upsert_daily_section(&vault, "2026-06-30", "Sessions", "ssh-note-2").unwrap();
+        let body = std::fs::read_to_string(vault.join("Daily/2026-06-30.md")).unwrap();
+
+        let claude_hdr = body.find("## Claude Sessions").unwrap();
+        assert!(body.find("[[ssh-note]]").unwrap() < claude_hdr);
+        assert!(body.find("[[ssh-note-2]]").unwrap() < claude_hdr, "ssh-note-2 leaked past the Claude header\n{body}");
+        assert!(body.find("[[claude-note]]").unwrap() > claude_hdr);
         std::fs::remove_dir_all(&vault).ok();
     }
 

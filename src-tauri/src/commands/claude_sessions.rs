@@ -6,6 +6,9 @@
 
 use chrono::{DateTime, Local};
 use serde_json::Value;
+use std::path::{Path, PathBuf};
+
+use crate::commands::logging::{upsert_daily_section, write_atomic};
 
 /// One rendered turn of a Claude conversation.
 #[derive(Debug, Clone, PartialEq)]
@@ -176,6 +179,20 @@ pub fn parse_session(jsonl: &str) -> Option<ClaudeSession> {
     })
 }
 
+/// Write a Claude session note to `Claude/<project>/<stem>.md` and link it into the
+/// day's index under `## Claude Sessions`. Returns the note path.
+pub fn write_claude_note(vault: &Path, session: &ClaudeSession) -> std::io::Result<PathBuf> {
+    let proj = if session.project.is_empty() { "unknown" } else { &session.project };
+    let dir = vault.join("Claude").join(proj);
+    std::fs::create_dir_all(&dir)?;
+    let stem = claude_note_stem(session);
+    let path = dir.join(format!("{stem}.md"));
+    write_atomic(&path, &render_claude_note(session))?;
+    let date = session.start.format("%Y-%m-%d").to_string();
+    upsert_daily_section(vault, &date, "Claude Sessions", &stem)?;
+    Ok(path)
+}
+
 /// Filename stem (no extension) for a session note, e.g. `2026-06-25 abc123de`.
 pub fn claude_note_stem(session: &ClaudeSession) -> String {
     let short: String = session.session_id.chars().take(8).collect();
@@ -272,6 +289,21 @@ mod tests {
         assert!(note.contains("> 🔧 Edit: src/main.rs"));
         // Internal thinking must never leak into the note.
         assert!(!note.contains("secret internal"));
+    }
+
+    #[test]
+    fn writes_note_and_links_daily() {
+        let s = parse_session(FIXTURE).unwrap();
+        let vault = std::env::temp_dir().join(format!("slimrdm-test-{}", uuid::Uuid::new_v4()));
+        let p = write_claude_note(&vault, &s).unwrap();
+        assert!(p.ends_with("Claude/SlimRdm/".to_string() + &claude_note_stem(&s) + ".md"));
+        assert!(std::fs::read_to_string(&p).unwrap().contains("How do I run tests?"));
+        // Daily index links it under the Claude section.
+        let date = s.start.format("%Y-%m-%d").to_string();
+        let daily = std::fs::read_to_string(vault.join(format!("Daily/{date}.md"))).unwrap();
+        assert!(daily.contains("## Claude Sessions"));
+        assert!(daily.contains(&format!("[[{}]]", claude_note_stem(&s))));
+        std::fs::remove_dir_all(&vault).ok();
     }
 
     #[test]
