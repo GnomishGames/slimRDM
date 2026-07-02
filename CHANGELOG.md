@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.7.0] - 2026-07-02
+
+### Added
+- **Session logging to Obsidian** — SSH session output can be captured to a Markdown vault, with per-connection and per-group logging toggles, a Settings section for the vault path and redaction patterns, and rendered session + daily notes. Orphaned raw capture files are swept on startup.
+- **Claude Code session journal** — Claude Code transcripts can be ingested into the same Obsidian vault as session notes with a section-aware daily index, synced incrementally on startup.
+- **Sidebar remembers group expand/collapse state** — groups now reopen in the state you left them in, instead of collapsing on every launch.
+
+### Changed
+- **Summarizer plugin moved to its own project** — the companion Obsidian summarizer (previously `obsidian-plugin/slimrdm-summarizer`) now lives in a standalone repository, since it is useful beyond slimRDM. It is no longer part of this repo.
+
 ## [1.6.2] - 2026-06-28
 
 ### Fixed
