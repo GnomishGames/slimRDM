@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.1] - 2026-07-02
+
+### Fixed
+- **Per-connection / per-group "Log Sessions" setting now persists** — the backend store structs were missing the `logSessions` field, so the value was silently dropped on save and the dropdown always reverted to *Inherit*. Existing records without the field load as *Inherit*.
+
+### Added
+- **Active session highlighted in the sidebar** — the connection whose session is currently on screen now shows an accent bar in the left-hand list, mirroring the highlight on its tab.
+
 ## [1.7.0] - 2026-07-02
 
 ### Added
