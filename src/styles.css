@@ -190,6 +190,14 @@ html, body, #root {
 .connection-btn:hover { background: var(--bg-hover); }
 .connection-btn:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 
+/* Session on screen — mirrors the .tab--active accent in the tab bar */
+.connection-item--active .connection-btn {
+  background: var(--bg-elevated);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.connection-item--active .connection-btn:hover { background: var(--bg-hover); }
+.connection-item--active .conn-label { color: var(--text-primary); }
+
 .conn-icon {
   display: flex;
   align-items: center;

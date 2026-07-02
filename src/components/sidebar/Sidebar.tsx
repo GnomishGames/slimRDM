@@ -423,6 +423,15 @@ function ConnectionItem({
   const groups = useAppStore((s) => s.groups);
   const connStatus = session?.status ?? "idle";
 
+  // Highlight the item when its session belongs to the tab currently on screen
+  // (mirrors the .tab--active accent in SessionTabs). With splits, every pane in
+  // the visible tab shares the active tab's id, so all of them light up.
+  const isActive = useAppStore((s) => {
+    if (!session) return false;
+    const activeTabId = s.sessions.find((sess) => sess.id === s.activeSessionId)?.tabId ?? s.activeSessionId;
+    return activeTabId != null && (session.tabId ?? session.id) === activeTabId;
+  });
+
   const displayUsername = conn.useGroupCredentials && conn.groupId
     ? (groups.find((g) => g.id === conn.groupId)?.username ?? conn.username)
     : conn.username;
@@ -443,7 +452,7 @@ function ConnectionItem({
       {editing && <AddConnectionModal editing={conn} onClose={() => setEditing(false)} />}
       {duplicating && <AddConnectionModal prefill={conn} onClose={() => setDuplicating(false)} />}
       <div
-        className={clsx("connection-item", indent && "connection-item--indented")}
+        className={clsx("connection-item", indent && "connection-item--indented", isActive && "connection-item--active")}
         onContextMenu={(e) => { e.preventDefault(); setShowMenu(true); }}
         onBlur={() => setShowMenu(false)}
         tabIndex={0}
