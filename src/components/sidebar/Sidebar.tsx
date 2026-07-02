@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Search, Plus, Monitor, Terminal, ChevronRight, ChevronDown, ChevronUp, ChevronsUp, ChevronsDown, Folder, FolderPlus, Layers, Settings, LockKeyhole, Key, Cpu } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
+import { useSettingsStore } from "../../store/settingsStore";
 import { Category, Connection, Group } from "../../types";
 import { AddConnectionModal } from "../modals/AddConnectionModal";
 import { EditGroupModal } from "../modals/EditGroupModal";
@@ -16,7 +17,12 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
     addGroup, deleteGroup, addCategory, updateCategory, deleteCategory,
   } = useAppStore();
 
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  // Group expand/collapse state is persisted in settings.json (see settingsStore).
+  // Deriving from the store — rather than local state — means the persisted value
+  // is applied automatically once settings finish loading after mount.
+  const expandedGroupIds = useSettingsStore((s) => s.expandedGroupIds);
+  const setExpandedGroupIds = useSettingsStore((s) => s.setExpandedGroupIds);
+  const expandedGroups = useMemo(() => new Set(expandedGroupIds), [expandedGroupIds]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
@@ -54,11 +60,9 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
   }, [categories.length]);
 
   const toggleGroup = (id: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    const next = new Set(expandedGroups);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setExpandedGroupIds([...next]);
   };
 
   const toggleCategory = (id: string) => {
@@ -70,14 +74,14 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
   };
 
   const allCollapsed = groups.length > 0 && expandedGroups.size === 0;
-  const handleCollapseAll = () => setExpandedGroups(new Set());
-  const handleExpandAll = () => setExpandedGroups(new Set(groups.map((g) => g.id)));
+  const handleCollapseAll = () => setExpandedGroupIds([]);
+  const handleExpandAll = () => setExpandedGroupIds(groups.map((g) => g.id));
 
   const handleAddGroup = async () => {
     const name = newGroupName.trim();
     if (!name) { setAddingGroup(false); return; }
     const added = await addGroup({ name, color: "#58a6ff" });
-    setExpandedGroups((prev) => new Set(prev).add(added.id));
+    setExpandedGroupIds([...expandedGroupIds, added.id]);
     setNewGroupName("");
     setAddingGroup(false);
   };

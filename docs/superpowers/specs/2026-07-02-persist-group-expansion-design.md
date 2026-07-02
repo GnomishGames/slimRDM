@@ -46,12 +46,18 @@ Store an **array of IDs** in `settings.json` (JSON has no `Set`); convert to a
   and writes to the store — same shape as `setBehavior` / `setLogging`.
 
 ### `src/components/sidebar/Sidebar.tsx`
-- Lazily initialize `expandedGroups` from the store's current
-  `expandedGroupIds` (settings `load()` completes before the Sidebar mounts, so
-  the value is available):
-  `useState<Set<string>>(() => new Set(useSettingsStore.getState().expandedGroupIds))`.
-- After computing the next set in `toggleGroup`, `handleCollapseAll`, and
-  `handleExpandAll`, persist via `setExpandedGroupIds([...next])`.
+- **Derive** `expandedGroups` from the settings store rather than keeping a
+  separate local `useState`:
+  `const expandedGroupIds = useSettingsStore((s) => s.expandedGroupIds);`
+  `const expandedGroups = useMemo(() => new Set(expandedGroupIds), [expandedGroupIds]);`
+  This is deliberate: `loadSettings()` runs inside a post-mount `useEffect` in
+  `App.tsx`, so it completes **after** the Sidebar's first render. A one-time
+  lazy `useState` seed would read the default `[]` and never pick up the
+  persisted value. Deriving from the store means the component re-renders with
+  the persisted set automatically once `load()` finishes.
+- `toggleGroup`, `handleCollapseAll`, `handleExpandAll`, and the auto-expand of
+  a newly created group all write the next id list via `setExpandedGroupIds`;
+  the store update drives the re-render.
 
 No backend/Rust changes. No new Tauri capabilities.
 

@@ -56,6 +56,7 @@ interface SettingsState {
   rdpDefaults: RdpDefaults;
   behavior: BehaviorSettings;
   logging: LoggingSettings;
+  expandedGroupIds: string[];
   load: () => Promise<void>;
   setTerminal: (patch: Partial<TerminalSettings>) => void;
   setAppTheme: (theme: string) => void;
@@ -64,6 +65,7 @@ interface SettingsState {
   setRdpPerformanceFlags: (patch: Partial<RdpDefaults["performanceFlags"]>) => void;
   setBehavior: (patch: Partial<BehaviorSettings>) => void;
   setLogging: (patch: Partial<LoggingSettings>) => void;
+  setExpandedGroupIds: (ids: string[]) => void;
 }
 
 let _store: Store | null = null;
@@ -79,6 +81,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   rdpDefaults: DEFAULT_RDP_DEFAULTS,
   behavior: DEFAULT_BEHAVIOR,
   logging: DEFAULT_LOGGING,
+  expandedGroupIds: [],
 
   load: async () => {
     const s = await getStore();
@@ -88,11 +91,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const savedRdpDefaults = await s.get<RdpDefaults>("rdpDefaults");
     const savedBehavior = await s.get<BehaviorSettings>("behavior");
     const savedLogging = await s.get<LoggingSettings>("logging");
+    const savedExpandedGroupIds = await s.get<string[]>("expandedGroupIds");
     if (savedTerminal) set({ terminal: { ...DEFAULT_TERMINAL, ...savedTerminal } });
     if (savedSshDefaults) set({ sshDefaults: { ...DEFAULT_SSH_DEFAULTS, ...savedSshDefaults } });
     if (savedRdpDefaults) set({ rdpDefaults: { ...DEFAULT_RDP_DEFAULTS, ...savedRdpDefaults } });
     if (savedBehavior) set({ behavior: { ...DEFAULT_BEHAVIOR, ...savedBehavior } });
     if (savedLogging) set({ logging: { ...DEFAULT_LOGGING, ...savedLogging } });
+    if (savedExpandedGroupIds) set({ expandedGroupIds: savedExpandedGroupIds });
     const appTheme = savedAppTheme ?? "github-dark";
     set({ appTheme });
     applyAppTheme(appTheme);
@@ -139,5 +144,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const next = { ...get().logging, ...patch };
     set({ logging: next });
     getStore().then((s) => { s.set("logging", next); s.save(); });
+  },
+
+  setExpandedGroupIds: (ids) => {
+    set({ expandedGroupIds: ids });
+    getStore().then((s) => { s.set("expandedGroupIds", ids); s.save(); });
   },
 }));
