@@ -30,6 +30,8 @@ pub struct Connection {
     pub startup_commands: Option<String>,
     #[serde(default)]
     pub auto_connect: bool,
+    #[serde(default)]
+    pub log_sessions: LogMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -46,6 +48,15 @@ pub enum AuthType {
     Password,
     PublicKey,
     Agent,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum LogMode {
+    #[default]
+    Inherit,
+    On,
+    Off,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +92,8 @@ pub struct Group {
     pub auth_type: Option<AuthType>,
     pub private_key_path: Option<String>,
     pub category_id: Option<String>,
+    #[serde(default)]
+    pub log_sessions: LogMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,6 +163,8 @@ pub struct NewConnection {
     pub startup_commands: Option<String>,
     #[serde(default)]
     pub auto_connect: bool,
+    #[serde(default)]
+    pub log_sessions: LogMode,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -173,6 +188,8 @@ pub struct UpdateGroup {
     pub auth_type: Option<AuthType>,
     pub private_key_path: Option<String>,
     pub category_id: Option<String>,
+    #[serde(default)]
+    pub log_sessions: LogMode,
 }
 
 pub fn init(_app: &AppHandle) -> anyhow::Result<()> {

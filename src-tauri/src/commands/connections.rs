@@ -68,6 +68,7 @@ pub async fn add_connection(app: tauri::AppHandle, connection: NewConnection) ->
         shell_path: connection.shell_path,
         startup_commands: connection.startup_commands,
         auto_connect: connection.auto_connect,
+        log_sessions: connection.log_sessions,
     };
     store.connections.push(conn.clone());
     save_store(&app, &store).map_err(|e| e.to_string())?;
