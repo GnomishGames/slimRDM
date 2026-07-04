@@ -3,7 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
-import { trm } from "../utils/tauri";
+import { trm, clipboard } from "../utils/tauri";
 import { getTheme } from "../utils/terminalThemes";
 import { createLinkHandler } from "../utils/linkHandler";
 import { useAppStore } from "../store/appStore";
@@ -54,7 +54,7 @@ export function useTrmTerminal({ sessionId, connection, containerRef }: UseTrmTe
     term.onSelectionChange(() => {
       if (!useSettingsStore.getState().behavior.copyOnSelect) return;
       const sel = term.getSelection();
-      if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+      if (sel) clipboard.setSystem(sel).catch(() => {});
     });
 
     listenersRef.current = [
