@@ -8,6 +8,7 @@ import { getTheme } from "../utils/terminalThemes";
 import { createLinkHandler } from "../utils/linkHandler";
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
+import { useToastStore } from "../store/toastStore";
 import { Connection, SessionLogParams } from "../types";
 
 type ResolvedCreds = {
@@ -132,7 +133,11 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
     term.onSelectionChange(() => {
       if (!useSettingsStore.getState().behavior.copyOnSelect) return;
       const sel = term.getSelection();
-      if (sel) clipboard.setSystem(sel).catch(() => {});
+      if (sel) {
+        clipboard.setSystem(sel)
+          .then(() => useToastStore.getState().show("Copied"))
+          .catch(() => {});
+      }
     });
 
     listenersRef.current = [

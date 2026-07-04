@@ -8,6 +8,7 @@ import { SplitDivider } from "./components/session/SplitDivider";
 import { AddConnectionModal } from "./components/modals/AddConnectionModal";
 import { useAppStore } from "./store/appStore";
 import { useSettingsStore } from "./store/settingsStore";
+import { useToastStore } from "./store/toastStore";
 import { updates, UpdateInfo } from "./utils/tauri";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { collectLeafSessionIds, computePaneLayout, countLeaves } from "./utils/paneTree";
@@ -22,6 +23,7 @@ export default function App() {
     setSearchQuery,
   } = useAppStore();
   const loadSettings = useSettingsStore((s) => s.load);
+  const toastMessage = useToastStore((s) => s.message);
 
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateDownloading, setUpdateDownloading] = useState(false);
@@ -152,6 +154,7 @@ export default function App() {
   return (
     <>
       {showAddModal && <AddConnectionModal onClose={() => setShowAddModal(false)} />}
+      {toastMessage && <div className="copy-toast">{toastMessage}</div>}
       {updateInfo && (
         <div className="update-toast">
           <span>v{updateInfo.latestVersion} available</span>

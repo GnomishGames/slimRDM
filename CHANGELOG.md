@@ -5,6 +5,9 @@
 ### Fixed
 - **Copy-on-select now reliably reaches the system clipboard** — terminal selections were copied via the browser `navigator.clipboard.writeText` API, which Chromium rejects intermittently when the document lacks focus or an active user gesture, so selections often silently failed to copy. Copy-on-select now routes through the OS clipboard (`arboard`) in the Rust backend, matching the RDP clipboard path.
 
+### Added
+- **"Copied" confirmation toast** — a brief toast now appears when a terminal selection is copied to the clipboard, so there is visible feedback even at a plain shell prompt (previously the copy was silent).
+
 ## [1.7.1] - 2026-07-02
 
 ### Fixed

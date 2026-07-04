@@ -8,6 +8,7 @@ import { getTheme } from "../utils/terminalThemes";
 import { createLinkHandler } from "../utils/linkHandler";
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
+import { useToastStore } from "../store/toastStore";
 import { Connection } from "../types";
 
 interface UseTrmTerminalOptions {
@@ -54,7 +55,11 @@ export function useTrmTerminal({ sessionId, connection, containerRef }: UseTrmTe
     term.onSelectionChange(() => {
       if (!useSettingsStore.getState().behavior.copyOnSelect) return;
       const sel = term.getSelection();
-      if (sel) clipboard.setSystem(sel).catch(() => {});
+      if (sel) {
+        clipboard.setSystem(sel)
+          .then(() => useToastStore.getState().show("Copied"))
+          .catch(() => {});
+      }
     });
 
     listenersRef.current = [
