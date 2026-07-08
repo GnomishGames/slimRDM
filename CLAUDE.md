@@ -4,7 +4,7 @@ Tauri 2 (Rust) + React 18 / TypeScript SSH/RDP connection manager.
 
 ## Dev
 ```bash
-source ~/.cargo/env && npm run tauri dev
+npm run tauri dev
 ```
 
 ## Repo
