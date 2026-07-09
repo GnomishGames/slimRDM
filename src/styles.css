@@ -1269,6 +1269,16 @@ kbd {
   margin-bottom: 8px;
 }
 
+.field-help {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+.field-help--warn {
+  color: var(--accent);
+}
+
 .data-action-btn {
   align-self: flex-start;
   display: inline-flex;

@@ -332,6 +332,12 @@ async fn run_ssh_session(
         _ => String::new(),
     };
 
+    // Register the password as a literal secret so the session logger masks
+    // exact occurrences (e.g. when the remote echoes the typed password).
+    if let Some(ref logger) = logger {
+        logger.add_literal_secret(stored_pw.clone());
+    }
+
     // Authenticate
     let authenticated = match &params.auth_type {
         AuthType::Password => {

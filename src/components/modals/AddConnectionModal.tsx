@@ -327,6 +327,12 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
                 onChange={e => setStartupCommands(e.target.value)}
                 rows={3}
               />
+              {startupCommands.includes("{password}") && (
+                <p className="field-help field-help--warn">
+                  The password will be typed into the remote shell and may be
+                  stored in its history or captured in session logs.
+                </p>
+              )}
             </Field>
           )}
 

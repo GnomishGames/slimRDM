@@ -138,6 +138,7 @@ struct Inner {
     vault: PathBuf,
     meta: NoteMeta,
     redaction_patterns: Vec<String>,
+    literal_secrets: Vec<String>,
     last_output: Instant,
     last_checkpoint: Instant,
     dirty: bool,
@@ -185,6 +186,7 @@ impl SessionLogger {
             vault: PathBuf::from(&params.vault_path),
             meta,
             redaction_patterns: params.redaction_patterns,
+            literal_secrets: Vec::new(),
             last_output: now,
             last_checkpoint: now,
             dirty: false,
@@ -222,6 +224,16 @@ impl SessionLogger {
             stop,
             task: Mutex::new(Some(task)),
         })
+    }
+
+    /// Register a literal value (e.g. a password) to be masked in the session
+    /// transcript. Safe to call after start; takes effect on next checkpoint.
+    pub fn add_literal_secret(&self, secret: String) {
+        if let Ok(mut g) = self.inner.lock() {
+            if !secret.is_empty() && !g.literal_secrets.contains(&secret) {
+                g.literal_secrets.push(secret);
+            }
+        }
     }
 
     /// Append raw output bytes. Never fails the caller; write errors are logged.
@@ -272,7 +284,7 @@ fn checkpoint(inner: &mut Inner, force: bool) -> std::io::Result<()> {
     let raw = std::fs::read(&inner.raw_path).unwrap_or_default();
     let text = String::from_utf8_lossy(&raw);
     let cleaned = clean(&text);
-    let redacted = redact(&cleaned, &inner.redaction_patterns);
+    let redacted = redact(&cleaned, &inner.literal_secrets, &inner.redaction_patterns);
     write_session_note(&inner.vault, &inner.meta, &redacted)?;
     if !inner.daily_linked {
         upsert_daily_index(&inner.vault, &inner.meta)?;
@@ -426,11 +438,18 @@ const BUILTIN_PATTERNS: &[&str] = &[
     r"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
 ];
 
-/// Best-effort redaction. Built-in patterns run first (masking the secret span
-/// with ████), then user-supplied regexes. Invalid user regexes are skipped so
-/// a bad pattern can never break capture.
-pub fn redact(text: &str, user_patterns: &[String]) -> String {
+/// Best-effort redaction. Literal secrets (e.g. passwords the user typed via
+/// {password} substitution) are masked first, character-for-character, so exact
+/// matches in the transcript are replaced. Then built-in patterns run, then
+/// user-supplied regexes. Invalid user regexes are skipped so a bad pattern can
+/// never break capture.
+pub fn redact(text: &str, literal_secrets: &[String], user_patterns: &[String]) -> String {
     let mut out = text.to_string();
+    for secret in literal_secrets {
+        if !secret.is_empty() {
+            out = out.replace(secret, "████");
+        }
+    }
     for pat in BUILTIN_PATTERNS {
         let re = Regex::new(pat).unwrap();
         out = re
@@ -580,8 +599,22 @@ mod tests {
     }
 
     #[test]
+    fn redacts_literal_secrets() {
+        let out = redact("my password is super-secret!", &["super-secret!".to_string()], &[]);
+        assert!(!out.contains("super-secret!"));
+        assert!(out.contains("████"));
+    }
+
+    #[test]
+    fn redacts_multiple_literal_secrets() {
+        let out = redact("token=abc123 secret=xyz789", &["abc123".to_string(), "xyz789".to_string()], &[]);
+        assert!(!out.contains("abc123"));
+        assert!(!out.contains("xyz789"));
+    }
+
+    #[test]
     fn redacts_key_value_secrets() {
-        let out = redact("password: hunter2\napikey=ABC123", &[]);
+        let out = redact("password: hunter2\napikey=ABC123", &[], &[]);
         assert!(out.contains("████"), "got: {out}");
         assert!(!out.contains("hunter2"));
         assert!(!out.contains("ABC123"));
@@ -589,20 +622,20 @@ mod tests {
 
     #[test]
     fn redacts_aws_access_key() {
-        let out = redact("key AKIAIOSFODNN7EXAMPLE here", &[]);
+        let out = redact("key AKIAIOSFODNN7EXAMPLE here", &[], &[]);
         assert!(!out.contains("AKIAIOSFODNN7EXAMPLE"));
     }
 
     #[test]
     fn applies_user_pattern() {
-        let out = redact("token PRIVATE-XYZ done", &[r"PRIVATE-\w+".to_string()]);
+        let out = redact("token PRIVATE-XYZ done", &[], &[r"PRIVATE-\w+".to_string()]);
         assert!(!out.contains("PRIVATE-XYZ"));
         assert!(out.contains("done"));
     }
 
     #[test]
     fn invalid_user_pattern_is_ignored() {
-        let out = redact("safe text", &["(".to_string()]);
+        let out = redact("safe text", &[], &["(".to_string()]);
         assert_eq!(out, "safe text");
     }
 
