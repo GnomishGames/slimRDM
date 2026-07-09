@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
 import { trm, clipboard } from "../utils/tauri";
 import { getTheme } from "../utils/terminalThemes";
@@ -45,6 +46,19 @@ export function useTrmTerminal({ sessionId, connection, containerRef }: UseTrmTe
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon(createLinkHandler(term)));
     term.open(containerRef.current);
+
+    // GPU renderer — the DOM renderer falls behind on full-screen TUI redraws
+    // (e.g. Claude Code), leaving stale/misplaced cells. WebGL renders the whole
+    // grid on one texture and keeps up. Fall back to DOM if the context is lost
+    // or WebGL is unavailable.
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      term.loadAddon(webgl);
+    } catch {
+      // WebGL unavailable — xterm.js keeps the DOM renderer.
+    }
+
     fitAddon.fit();
 
     termRef.current = term;

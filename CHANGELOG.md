@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.3] - 2026-07-09
+
+### Fixed
+- **Terminal rendering corruption during full-screen redraws** — heavy TUI apps (e.g. Claude Code) that continuously repaint the whole screen could leave text jumbled or draw lines on the wrong row, because the terminal was running on xterm.js's DOM renderer, which falls behind under that load. Terminals now use the GPU-accelerated WebGL renderer, which keeps up with rapid full-screen redraws; it falls back to the DOM renderer automatically where WebGL is unavailable.
+
 ## [1.7.2] - 2026-07-03
 
 ### Fixed
