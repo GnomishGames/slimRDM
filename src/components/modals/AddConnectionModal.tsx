@@ -41,6 +41,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
   const [workingDirectory, setWorkingDirectory] = useState(source?.workingDirectory ?? "");
   const [shellPath, setShellPath] = useState(source?.shellPath ?? "");
   const [startupCommands, setStartupCommands] = useState(source?.startupCommands ?? "");
+  const [allowLegacyCrypto, setAllowLegacyCrypto] = useState(source?.allowLegacyCrypto ?? false);
   const [autoConnect, setAutoConnect] = useState(source?.autoConnect ?? false);
   const [logSessions, setLogSessions] = useState<LogMode>(source?.logSessions ?? "inherit");
   const [notes, setNotes] = useState(source?.notes ?? "");
@@ -128,6 +129,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
           startupCommands: effectiveStartupCommands,
           autoConnect,
           logSessions,
+          allowLegacyCrypto: connType === "ssh" ? allowLegacyCrypto : false,
         });
       } else {
         await addConnection({
@@ -149,6 +151,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
           startupCommands: effectiveStartupCommands,
           autoConnect,
           logSessions,
+          allowLegacyCrypto: connType === "ssh" ? allowLegacyCrypto : false,
         });
       }
       onClose();
@@ -334,6 +337,27 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
                 </p>
               )}
             </Field>
+          )}
+
+          {connType === "ssh" && (
+            <div className="field-row field-row--toggle">
+              <label className="field-label">Legacy Crypto</label>
+              <button
+                type="button"
+                className={clsx("toggle", allowLegacyCrypto && "toggle--on")}
+                onClick={() => setAllowLegacyCrypto(!allowLegacyCrypto)}
+                role="switch"
+                aria-checked={allowLegacyCrypto}
+              >
+                <span className="toggle-thumb" />
+              </button>
+            </div>
+          )}
+          {connType === "ssh" && (
+            <p className="field-help">
+              Enable SHA-1 KEX, ssh-rsa keys, and CBC ciphers for legacy
+              devices (Cisco switches, old routers).
+            </p>
           )}
 
           <div className="field-row field-row--toggle">

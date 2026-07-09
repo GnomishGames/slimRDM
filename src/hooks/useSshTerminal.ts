@@ -235,6 +235,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
         initialCols: term?.cols,
         initialRows: term?.rows,
         jumpHostParams,
+        allowLegacyCrypto: connection.allowLegacyCrypto,
         logging: resolveLogging(connection),
       });
     } catch (err) {

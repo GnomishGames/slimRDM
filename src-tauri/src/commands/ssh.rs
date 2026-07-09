@@ -41,6 +41,8 @@ pub struct SshConnectParams {
     pub startup_commands: Option<String>,
     pub jump_host_params: Option<JumpHostParams>,
     pub logging: Option<SessionLogParams>,
+    #[serde(default)]
+    pub allow_legacy_crypto: bool,
 }
 
 /// Emitted to frontend for terminal output
@@ -154,42 +156,72 @@ async fn run_ssh_session(
         .filter(|&s| s > 0)
         .map(|s| std::time::Duration::from_secs(s.into()));
 
-    // Extend the default preferred algorithms to include legacy options required by
-    // Cisco switches (CBS350 etc.) which only offer diffie-hellman-group14-sha1,
-    // aes128-cbc ciphers, and ssh-rsa host keys. Modern servers still negotiate
-    // the strongest mutually-supported algorithm, so adding these is safe.
-    let preferred = Preferred {
-        kex: Cow::Owned(vec![
-            kex::CURVE25519,
-            kex::CURVE25519_PRE_RFC_8731,
-            kex::DH_G16_SHA512,
-            kex::DH_G14_SHA256,
-            kex::EXTENSION_SUPPORT_AS_CLIENT,
-            kex::EXTENSION_SUPPORT_AS_SERVER,
-            kex::EXTENSION_OPENSSH_STRICT_KEX_AS_CLIENT,
-            kex::EXTENSION_OPENSSH_STRICT_KEX_AS_SERVER,
-            kex::DH_G14_SHA1,
-            kex::DH_G1_SHA1,
-        ]),
-        key: Cow::Owned(vec![
-            key::ED25519,
-            key::ECDSA_SHA2_NISTP256,
-            key::ECDSA_SHA2_NISTP521,
-            key::RSA_SHA2_256,
-            key::RSA_SHA2_512,
-            key::SSH_RSA,
-        ]),
-        cipher: Cow::Owned(vec![
-            cipher::CHACHA20_POLY1305,
-            cipher::AES_256_GCM,
-            cipher::AES_256_CTR,
-            cipher::AES_192_CTR,
-            cipher::AES_128_CTR,
-            cipher::AES_256_CBC,
-            cipher::AES_192_CBC,
-            cipher::AES_128_CBC,
-        ]),
-        ..Preferred::DEFAULT
+    // When allow_legacy_crypto is enabled, include SHA-1 KEX algorithms,
+    // ssh-rsa host keys, and CBC ciphers needed for legacy devices (Cisco
+    // switches etc.). Modern servers negotiate the strongest mutually-supported
+    // algorithm, so adding these is safe when explicitly opted in.
+    let preferred = if params.allow_legacy_crypto {
+        Preferred {
+            kex: Cow::Owned(vec![
+                kex::CURVE25519,
+                kex::CURVE25519_PRE_RFC_8731,
+                kex::DH_G16_SHA512,
+                kex::DH_G14_SHA256,
+                kex::EXTENSION_SUPPORT_AS_CLIENT,
+                kex::EXTENSION_SUPPORT_AS_SERVER,
+                kex::EXTENSION_OPENSSH_STRICT_KEX_AS_CLIENT,
+                kex::EXTENSION_OPENSSH_STRICT_KEX_AS_SERVER,
+                kex::DH_G14_SHA1,
+                kex::DH_G1_SHA1,
+            ]),
+            key: Cow::Owned(vec![
+                key::ED25519,
+                key::ECDSA_SHA2_NISTP256,
+                key::ECDSA_SHA2_NISTP521,
+                key::RSA_SHA2_256,
+                key::RSA_SHA2_512,
+                key::SSH_RSA,
+            ]),
+            cipher: Cow::Owned(vec![
+                cipher::CHACHA20_POLY1305,
+                cipher::AES_256_GCM,
+                cipher::AES_256_CTR,
+                cipher::AES_192_CTR,
+                cipher::AES_128_CTR,
+                cipher::AES_256_CBC,
+                cipher::AES_192_CBC,
+                cipher::AES_128_CBC,
+            ]),
+            ..Preferred::DEFAULT
+        }
+    } else {
+        Preferred {
+            kex: Cow::Owned(vec![
+                kex::CURVE25519,
+                kex::CURVE25519_PRE_RFC_8731,
+                kex::DH_G16_SHA512,
+                kex::DH_G14_SHA256,
+                kex::EXTENSION_SUPPORT_AS_CLIENT,
+                kex::EXTENSION_SUPPORT_AS_SERVER,
+                kex::EXTENSION_OPENSSH_STRICT_KEX_AS_CLIENT,
+                kex::EXTENSION_OPENSSH_STRICT_KEX_AS_SERVER,
+            ]),
+            key: Cow::Owned(vec![
+                key::ED25519,
+                key::ECDSA_SHA2_NISTP256,
+                key::ECDSA_SHA2_NISTP521,
+                key::RSA_SHA2_256,
+                key::RSA_SHA2_512,
+            ]),
+            cipher: Cow::Owned(vec![
+                cipher::CHACHA20_POLY1305,
+                cipher::AES_256_GCM,
+                cipher::AES_256_CTR,
+                cipher::AES_192_CTR,
+                cipher::AES_128_CTR,
+            ]),
+            ..Preferred::DEFAULT
+        }
     };
 
     let config = Arc::new(client::Config {

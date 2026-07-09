@@ -27,6 +27,7 @@ export const ssh = {
       privateKeyPassphrase?: string;
     };
     logging?: SessionLogParams;
+    allowLegacyCrypto?: boolean;
   }) => invoke("ssh_connect", { params }),
 
   sendInput: (sessionId: string, data: string) =>

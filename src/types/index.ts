@@ -35,6 +35,7 @@ export interface Connection {
   startupCommands?: string;
   autoConnect?: boolean;
   logSessions?: LogMode;
+  allowLegacyCrypto?: boolean;
 }
 
 export interface Category {
@@ -170,4 +171,5 @@ export interface NewConnectionForm {
   startupCommands?: string;
   autoConnect?: boolean;
   logSessions?: LogMode;
+  allowLegacyCrypto?: boolean;
 }

@@ -69,6 +69,7 @@ pub async fn add_connection(app: tauri::AppHandle, connection: NewConnection) ->
         startup_commands: connection.startup_commands,
         auto_connect: connection.auto_connect,
         log_sessions: connection.log_sessions,
+        allow_legacy_crypto: connection.allow_legacy_crypto,
     };
     store.connections.push(conn.clone());
     save_store(&app, &store).map_err(|e| e.to_string())?;

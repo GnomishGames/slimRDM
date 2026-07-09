@@ -32,6 +32,8 @@ pub struct Connection {
     pub auto_connect: bool,
     #[serde(default)]
     pub log_sessions: LogMode,
+    #[serde(default)]
+    pub allow_legacy_crypto: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -165,6 +167,8 @@ pub struct NewConnection {
     pub auto_connect: bool,
     #[serde(default)]
     pub log_sessions: LogMode,
+    #[serde(default)]
+    pub allow_legacy_crypto: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
