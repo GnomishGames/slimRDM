@@ -88,6 +88,36 @@ pub async fn trm_connect(app: AppHandle, params: TrmConnectParams) -> std::resul
     Ok(())
 }
 
+fn resolve_shell(shell_path: Option<&str>) -> std::result::Result<String, String> {
+    #[cfg(windows)]
+    let allowed: &[&str] = &["powershell.exe", "pwsh.exe", "cmd.exe"];
+    #[cfg(not(windows))]
+    let allowed: &[&str] = &["sh", "bash", "zsh", "fish", "dash", "ksh"];
+
+    match shell_path {
+        Some(path) if !path.is_empty() => {
+            let name = std::path::Path::new(path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| "Invalid shell path".to_string())?;
+            if !allowed.contains(&name) {
+                return Err(format!(
+                    "Shell '{}' is not allowed. Allowed shells: {}",
+                    name,
+                    allowed.join(", ")
+                ));
+            }
+            Ok(path.to_string())
+        }
+        _ => {
+            #[cfg(windows)]
+            { Ok("powershell.exe".to_string()) }
+            #[cfg(not(windows))]
+            { Ok(std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())) }
+        }
+    }
+}
+
 async fn run_trm_session(
     app: &AppHandle,
     params: &TrmConnectParams,
@@ -102,14 +132,7 @@ async fn run_trm_session(
         pixel_height: 0,
     }).map_err(|e| format!("PTY open failed: {e}"))?;
 
-    let shell = if let Some(ref s) = params.shell_path {
-        s.clone()
-    } else {
-        #[cfg(windows)]
-        { "powershell.exe".to_string() }
-        #[cfg(not(windows))]
-        { std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()) }
-    };
+    let shell = resolve_shell(params.shell_path.as_deref())?;
 
     let mut cmd = CommandBuilder::new(&shell);
     cmd.env("TERM", "xterm-256color");
