@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::io::Write;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
@@ -339,10 +338,9 @@ async fn run_ssh_session(
             let pw = &stored_pw;
 
             ssh_log(&format!(
-                "credential_ref={:?} found={} pw_len={}",
+                "credential_ref={:?} found={}",
                 params.credential_ref.as_deref().unwrap_or("(none)"),
                 !pw.is_empty(),
-                pw.len()
             ));
 
             // Step 1: try "none" auth. OpenSSH always does this first; some devices
@@ -535,19 +533,5 @@ pub async fn ssh_disconnect(session_id: String) -> std::result::Result<(), Strin
 }
 
 fn ssh_log(msg: &str) {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let path = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    let log = format!("{path}/.local/share/slimrdm/ssh.log");
-    // Rotate at 1 MB so the log doesn't grow unbounded.
-    if std::fs::metadata(&log).map(|m| m.len()).unwrap_or(0) > 1_000_000 {
-        let _ = std::fs::rename(&log, format!("{log}.1"));
-    }
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log) {
-        let _ = writeln!(f, "[{ts}] {msg}");
-    }
-    log::debug!("{msg}");
+    log::info!("[ssh] {msg}");
 }
