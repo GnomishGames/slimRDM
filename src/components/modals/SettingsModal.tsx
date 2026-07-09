@@ -680,7 +680,7 @@ function AboutSection() {
                 onClick={async () => {
                   setUpdateState("downloading");
                   try {
-                    await updates.install(updateInfo.downloadUrl!);
+                    await updates.install(updateInfo.downloadUrl!, updateInfo.expectedSha256 ?? undefined);
                     setUpdateState("up-to-date");
                   } catch (err) {
                     setUpdateError(String(err));

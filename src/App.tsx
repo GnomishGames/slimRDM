@@ -170,7 +170,7 @@ export default function App() {
                 if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
                 setUpdateDownloading(true);
                 try {
-                  await updates.install(updateInfo.downloadUrl);
+                  await updates.install(updateInfo.downloadUrl, updateInfo.expectedSha256 ?? undefined);
                 } catch { /* installer launched or failed; dismiss either way */ }
                 setUpdateInfo(null);
                 setUpdateDownloading(false);

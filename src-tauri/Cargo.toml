@@ -37,6 +37,7 @@ sha2 = "0.10"
 async-trait = "0.1"
 lazy_static = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
+url = "2"
 regex = "1"
 chrono = { version = "0.4", features = ["clock"] }
 
