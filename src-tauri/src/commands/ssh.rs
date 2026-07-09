@@ -5,10 +5,6 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 use serde::{Deserialize, Serialize};
 
-use sha2::{Digest, Sha256};
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64;
-
 use crate::store::AuthType;
 use crate::commands::tunnel_utils::{JumpHostParams, open_jump_channel};
 use crate::commands::logging::{SessionLogParams, SessionLogger};
@@ -225,7 +221,7 @@ async fn run_ssh_session(
             &mut self,
             server_public_key: &key::PublicKey,
         ) -> std::result::Result<bool, Self::Error> {
-            let fp = BASE64.encode(Sha256::digest(format!("{server_public_key:?}").as_bytes()));
+            let fp = server_public_key.fingerprint();
             match crate::commands::known_hosts::check_or_store(&self.host, &fp) {
                 Ok(trusted) => Ok(trusted),
                 Err(msg) => {

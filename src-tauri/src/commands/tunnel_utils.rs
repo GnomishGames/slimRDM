@@ -1,10 +1,6 @@
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
-use sha2::{Digest, Sha256};
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64;
-
 use crate::store::AuthType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,8 +39,9 @@ pub async fn open_jump_channel(
             &mut self,
             server_public_key: &key::PublicKey,
         ) -> Result<bool, Self::Error> {
-            let fp = BASE64.encode(Sha256::digest(format!("{server_public_key:?}").as_bytes()));
-            Ok(crate::commands::known_hosts::check_or_store(&self.host, &fp).unwrap_or(false))
+            let fp = server_public_key.fingerprint();
+            crate::commands::known_hosts::check_or_store(&self.host, &fp)
+                .map_err(|e| russh::Error::from(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, e)))
         }
     }
 
