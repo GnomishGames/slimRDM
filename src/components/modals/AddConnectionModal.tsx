@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { X, Monitor, Terminal } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { useSettingsStore } from "../../store/settingsStore";
@@ -55,13 +55,8 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
   const selectedGroup = groups.find((g: Group) => g.id === groupId);
   const groupHasCredentials = !!(selectedGroup?.credentialRef || selectedGroup?.privateKeyPath);
 
-  // Pre-load existing password when editing or duplicating
-  useEffect(() => {
-    const ref = source?.credentialRef;
-    if (ref && source?.authType === "password") {
-      credentials.get(ref).then(setPassword).catch(() => {});
-    }
-  }, []);
+  // Password starts empty on edit — user re-enters rather than
+  // round-tripping the secret through the webview.
 
   const switchType = (t: ConnectionType) => {
     setConnType(t);

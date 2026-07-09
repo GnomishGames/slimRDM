@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { X, FolderOpen } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { credentials, dialog } from "../../utils/tauri";
@@ -26,11 +26,8 @@ export function EditGroupModal({ group, onClose }: Props) {
 
   const hasExistingCreds = !!(group.credentialRef || group.privateKeyPath);
 
-  useEffect(() => {
-    if (group.credentialRef) {
-      credentials.get(group.credentialRef).then(setPassword).catch(() => {});
-    }
-  }, []);
+  // Password starts empty on edit — user re-enters rather than
+  // round-tripping the secret through the webview.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

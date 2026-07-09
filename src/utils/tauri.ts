@@ -131,12 +131,14 @@ export interface UpdateInfo {
   currentVersion: string;
   latestVersion: string;
   downloadUrl: string | null;
+  expectedSha256: string | null;
   releaseNotes: string | null;
 }
 
 export const updates = {
   check: () => invoke<UpdateInfo>("check_for_updates"),
-  install: (url: string) => invoke<void>("download_and_install_update", { url }),
+  install: (url: string, expectedSha256?: string) =>
+    invoke<void>("download_and_install_update", { url, expectedSha256 }),
 };
 
 export const claude = {
@@ -146,9 +148,6 @@ export const claude = {
 export const credentials = {
   save: (refKey: string, password: string) =>
     invoke("save_credential", { refKey, password }),
-
-  get: (refKey: string) =>
-    invoke<string>("get_credential", { refKey }),
 
   delete: (refKey: string) =>
     invoke("delete_credential", { refKey }),

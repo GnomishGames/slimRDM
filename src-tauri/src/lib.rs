@@ -14,7 +14,7 @@ fn init_logger(data_dir: std::path::PathBuf) {
     if let Ok(file) = OpenOptions::new().create(true).append(true).open(&log_path) {
         env_logger::Builder::new()
             .filter_level(log::LevelFilter::Off)
-            .filter_module("russh", log::LevelFilter::Debug)
+            .filter_module("russh", log::LevelFilter::Warn)
             .filter_module("slimrdm", log::LevelFilter::Debug)
             .target(env_logger::Target::Pipe(Box::new(file)))
             .format_timestamp_secs()
@@ -79,9 +79,8 @@ pub fn run() {
             commands::clipboard::clipboard_set_system,
             commands::clipboard::clipboard_get_rdp,
             commands::clipboard::clipboard_set_rdp,
-            // Credentials
+            // Credentials (writes only — reads go through backend handlers)
             commands::credentials::save_credential,
-            commands::credentials::get_credential,
             commands::credentials::delete_credential,
             // Data
             commands::data::export_data,
