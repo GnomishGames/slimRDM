@@ -116,7 +116,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
       fontFamily: settings.fontFamily,
       fontSize: settings.fontSize,
       scrollback: settings.scrollback,
-      lineHeight: 1.2,
+      lineHeight: 1.0,
       theme: getTheme(settings.theme),
     });
 
@@ -202,7 +202,7 @@ export function useSshTerminal({ sessionId, connection, containerRef }: UseSshTe
       term.options.scrollback = s.scrollback;
       term.options.cursorStyle = s.cursorStyle;
       term.options.cursorBlink = s.cursorBlink;
-      term.options.lineHeight = 1.2;
+      term.options.lineHeight = 1.0;
       term.options.theme = getTheme(s.theme);
       fitAddonRef.current?.fit();
       term.refresh(0, term.rows - 1);
