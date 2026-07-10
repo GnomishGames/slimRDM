@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.7.5] - 2026-07-10
+
+### Fixed
+- **Box-drawing artifacts and stale lines in full-screen TUIs** — following the switch to the WebGL renderer in 1.7.3, terminals still drew stray horizontal line fragments and misaligned box borders in heavy TUI apps (e.g. Claude Code). The cause was a fractional `lineHeight` (1.2), which leaves a dead band between rows that the GPU renderer does not clear on partial redraws. Line height is now 1.0, matching the renderer's cell height to the glyph, so seams line up and no leftover pixels persist.
+
+## [1.7.4] - 2026-07-09
+
+### Security
+- **Dependency audit fixes** — `cargo update` resolved the `crossbeam-epoch` and `quick-xml` advisories. Remaining transitive advisories with no available patch (`hickory-proto`, `rsa` / Marvin attack, vendored `russh-cryptovec`, and GTK3 unmaintained-crate warnings) are documented and tracked.
+
 ## [1.7.3] - 2026-07-09
 
 ### Fixed
