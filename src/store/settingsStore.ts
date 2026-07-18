@@ -47,6 +47,7 @@ export const DEFAULT_TERMINAL: TerminalSettings = {
   cursorStyle: "block",
   cursorBlink: true,
   theme: "github-dark",
+  renderer: "webgl",
 };
 
 interface SettingsState {

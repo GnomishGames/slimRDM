@@ -3,6 +3,7 @@ export type AuthType = "password" | "public_key" | "agent";
 export type LogMode = "inherit" | "on" | "off";
 export type SessionStatus = "connecting" | "connected" | "disconnected" | "error";
 export type CursorStyle = "block" | "bar" | "underline";
+export type TerminalRenderer = "webgl" | "dom";
 
 export interface TerminalSettings {
   fontFamily: string;
@@ -11,6 +12,7 @@ export interface TerminalSettings {
   cursorStyle: CursorStyle;
   cursorBlink: boolean;
   theme: string;
+  renderer: TerminalRenderer;
 }
 
 export interface Connection {

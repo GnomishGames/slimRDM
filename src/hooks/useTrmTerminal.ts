@@ -21,6 +21,7 @@ interface UseTrmTerminalOptions {
 export function useTrmTerminal({ sessionId, connection, containerRef }: UseTrmTerminalOptions) {
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const webglAddonRef = useRef<WebglAddon | null>(null);
   const listenersRef = useRef<Promise<UnlistenFn>[]>([]);
   const setSessionStatus = useAppStore((s) => s.setSessionStatus);
   const closePane = useAppStore((s) => s.closePane);
@@ -47,16 +48,19 @@ export function useTrmTerminal({ sessionId, connection, containerRef }: UseTrmTe
     term.loadAddon(new WebLinksAddon(createLinkHandler(term)));
     term.open(containerRef.current);
 
-    // GPU renderer — the DOM renderer falls behind on full-screen TUI redraws
-    // (e.g. Claude Code), leaving stale/misplaced cells. WebGL renders the whole
-    // grid on one texture and keeps up. Fall back to DOM if the context is lost
-    // or WebGL is unavailable.
-    try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => webgl.dispose());
-      term.loadAddon(webgl);
-    } catch {
-      // WebGL unavailable — xterm.js keeps the DOM renderer.
+    // Renderer is user-selectable. WebGL keeps up with full-screen TUI redraws
+    // (e.g. Claude Code) that the DOM renderer falls behind on, leaving stale
+    // cells. The DOM renderer avoids GPU artifacts and GPU/EDR false positives
+    // seen on some Linux setups. Fall back to DOM if WebGL is unavailable.
+    if (settings.renderer === "webgl") {
+      try {
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => { webgl.dispose(); webglAddonRef.current = null; });
+        term.loadAddon(webgl);
+        webglAddonRef.current = webgl;
+      } catch {
+        // WebGL unavailable — xterm.js keeps the DOM renderer.
+      }
     }
 
     fitAddon.fit();
@@ -124,6 +128,21 @@ export function useTrmTerminal({ sessionId, connection, containerRef }: UseTrmTe
       term.options.cursorBlink = s.cursorBlink;
       term.options.lineHeight = 1.0;
       term.options.theme = getTheme(s.theme);
+      // Hot-swap the renderer when the setting changes. Disposing the WebGL
+      // addon reverts xterm.js to its DOM renderer.
+      if (s.renderer === "webgl" && !webglAddonRef.current) {
+        try {
+          const webgl = new WebglAddon();
+          webgl.onContextLoss(() => { webgl.dispose(); webglAddonRef.current = null; });
+          term.loadAddon(webgl);
+          webglAddonRef.current = webgl;
+        } catch {
+          // WebGL unavailable — keep DOM renderer.
+        }
+      } else if (s.renderer === "dom" && webglAddonRef.current) {
+        webglAddonRef.current.dispose();
+        webglAddonRef.current = null;
+      }
       fitAddonRef.current?.fit();
       term.refresh(0, term.rows - 1);
     });

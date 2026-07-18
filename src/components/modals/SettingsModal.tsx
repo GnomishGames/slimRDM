@@ -7,7 +7,7 @@ import { useSettingsStore } from "../../store/settingsStore";
 import { useAppStore } from "../../store/appStore";
 import { TERMINAL_THEMES, FONT_FAMILIES } from "../../utils/terminalThemes";
 import { APP_THEMES } from "../../utils/appThemes";
-import { CursorStyle, RdpDefaults } from "../../types";
+import { CursorStyle, RdpDefaults, TerminalRenderer } from "../../types";
 import { dialog, data, updates, claude, UpdateInfo } from "../../utils/tauri";
 import clsx from "clsx";
 
@@ -326,6 +326,21 @@ function AppearanceSection() {
         >
           <span className="toggle-thumb" />
         </button>
+      </div>
+
+      <div className="settings-group">
+        <label className="settings-row-label">Renderer</label>
+        <div className="cursor-style-toggle">
+          {(["webgl", "dom"] as TerminalRenderer[]).map((r) => (
+            <button
+              key={r}
+              className={clsx("cursor-btn", terminal.renderer === r && "cursor-btn--active")}
+              onClick={() => setTerminal({ renderer: r })}
+            >
+              <span>{r === "webgl" ? "WebGL (GPU)" : "DOM (compatible)"}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="settings-group settings-group--column">
