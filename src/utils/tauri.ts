@@ -133,13 +133,14 @@ export interface UpdateInfo {
   latestVersion: string;
   downloadUrl: string | null;
   expectedSha256: string | null;
+  expectedSignature: string | null;
   releaseNotes: string | null;
 }
 
 export const updates = {
   check: () => invoke<UpdateInfo>("check_for_updates"),
-  install: (url: string, expectedSha256?: string) =>
-    invoke<void>("download_and_install_update", { url, expectedSha256 }),
+  install: (url: string, signature: string, expectedSha256?: string) =>
+    invoke<void>("download_and_install_update", { url, signature, expectedSha256 }),
 };
 
 export const claude = {

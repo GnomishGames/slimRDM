@@ -1,9 +1,17 @@
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use minisign_verify::{PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use url::Url;
 
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const RELEASES_API: &str = "https://api.github.com/repos/GnomishGames/slimRDM/releases/latest";
+
+/// Minisign public key used to verify release update signatures, generated via
+/// `npx tauri signer generate`. The matching private key is held outside the repo;
+/// CI signs each release asset with it (see .github/workflows/release.yml).
+const UPDATE_PUBLIC_KEY: &str = "RWTrdjD/xZnfj9OtLtKJwGotGDdN8+1OiWXxB7lyK/OQk7gOX1Mjqdtl";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,6 +21,7 @@ pub struct UpdateInfo {
     pub latest_version: String,
     pub download_url: Option<String>,
     pub expected_sha256: Option<String>,
+    pub expected_signature: Option<String>,
     pub release_notes: Option<String>,
 }
 
@@ -119,8 +128,47 @@ async fn fetch_expected_sha256(
     body.split_whitespace().next().map(|s| s.to_string())
 }
 
+/// Fetches the `.sig` sidecar produced by `tauri signer sign` (base64-encoded
+/// minisign signature) for the given release asset, if one was published.
+async fn fetch_expected_signature(
+    client: &reqwest::Client,
+    assets: &[GithubAsset],
+    asset_name: &str,
+) -> Option<String> {
+    let sidecar_name = format!("{}.sig", asset_name);
+    let asset = assets.iter().find(|a| a.name == sidecar_name)?;
+    client
+        .get(&asset.browser_download_url)
+        .send()
+        .await
+        .ok()?
+        .text()
+        .await
+        .ok()
+}
+
+/// Verifies `bytes` against a base64-encoded minisign signature (as produced by
+/// `tauri signer sign`) using the embedded `UPDATE_PUBLIC_KEY`.
+fn verify_update_signature(bytes: &[u8], signature_b64: &str) -> Result<(), String> {
+    let decoded = BASE64
+        .decode(signature_b64.trim())
+        .map_err(|_| "Malformed update signature".to_string())?;
+    let sig_text = String::from_utf8(decoded).map_err(|_| "Malformed update signature".to_string())?;
+    let signature =
+        Signature::decode(&sig_text).map_err(|_| "Malformed update signature".to_string())?;
+    let public_key = PublicKey::from_base64(UPDATE_PUBLIC_KEY)
+        .map_err(|_| "Invalid embedded update public key".to_string())?;
+    public_key
+        .verify(bytes, &signature, false)
+        .map_err(|_| "Update signature verification failed".to_string())
+}
+
 #[tauri::command]
-pub async fn download_and_install_update(url: String, expected_sha256: Option<String>) -> Result<(), String> {
+pub async fn download_and_install_update(
+    url: String,
+    signature: String,
+    expected_sha256: Option<String>,
+) -> Result<(), String> {
     let parsed = validate_release_url(&url)?;
 
     let client = reqwest::Client::builder()
@@ -138,6 +186,8 @@ pub async fn download_and_install_update(url: String, expected_sha256: Option<St
         .bytes()
         .await
         .map_err(|e| format!("Read failed: {}", e))?;
+
+    verify_update_signature(&bytes, &signature)?;
 
     if let Some(expected) = expected_sha256 {
         let actual = Sha256::digest(&bytes)
@@ -216,18 +266,22 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
 
     let has_update = is_newer(&release.tag_name, CURRENT_VERSION);
 
-    let (download_url, expected_sha256) = if has_update {
-        let asset = pick_asset(&release.assets);
-        match asset {
+    // Only offer an in-app install when a signature sidecar is published for the
+    // asset; otherwise fall back to pointing the user at the releases page.
+    let (download_url, expected_sha256, expected_signature) = if has_update {
+        match pick_asset(&release.assets) {
             Some(a) => {
-                let url = a.browser_download_url.clone();
                 let sha = fetch_expected_sha256(&client, &release.assets, &a.name).await;
-                (Some(url), sha)
+                let sig = fetch_expected_signature(&client, &release.assets, &a.name).await;
+                match sig {
+                    Some(sig) => (Some(a.browser_download_url.clone()), sha, Some(sig)),
+                    None => (None, None, None),
+                }
             }
-            None => (None, None),
+            None => (None, None, None),
         }
     } else {
-        (None, None)
+        (None, None, None)
     };
 
     Ok(UpdateInfo {
@@ -236,6 +290,7 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
         latest_version: release.tag_name.trim_start_matches('v').to_string(),
         download_url,
         expected_sha256,
+        expected_signature,
         release_notes: release.body,
     })
 }
@@ -298,5 +353,41 @@ mod tests {
         assert!(is_newer("v1.8.0", "v1.7.2"));
         assert!(!is_newer("v1.7.2", "v1.8.0"));
         assert!(!is_newer("v1.7.2", "v1.7.2"));
+    }
+
+    // Fixture: "slimrdm-update-signature-test-fixture" signed with the real
+    // UPDATE_PUBLIC_KEY's private key via `tauri signer sign`. Signatures don't
+    // reveal the private key, so pinning one here is safe and gives real
+    // regression coverage for the embedded production key.
+    const FIXTURE_PAYLOAD: &[u8] = b"slimrdm-update-signature-test-fixture";
+    const FIXTURE_SIGNATURE_B64: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUcmRqRC94Wm5mai92U2FEbkFoSXNjVXNHZml5MkFBU1ZQWjduREZmcVB2d2N4S0w0NGxoYlJ2K3BRUHlrcEJYblNXczBYUGxlWUtVMXMwY0Z6RWJLQTRPOGtORndiUFFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0OTM1NjQyCWZpbGU6Zml4dHVyZS5iaW4KSGNwd2NBRW1xdHhxclA2eGNuaGF3Rk9EQytmNW5oTXBQZEw2azlLM2VxdTNIOVJqZjVXZ050MUY4WG1VK1dBb2tlLzM0Rm9XTk1rQkxUbzJydjNLQkE9PQo=";
+
+    #[test]
+    fn test_verify_update_signature_valid() {
+        assert!(verify_update_signature(FIXTURE_PAYLOAD, FIXTURE_SIGNATURE_B64).is_ok());
+    }
+
+    #[test]
+    fn test_verify_update_signature_tampered_payload() {
+        let tampered = b"slimrdm-update-signature-test-fixturE";
+        assert!(verify_update_signature(tampered, FIXTURE_SIGNATURE_B64).is_err());
+    }
+
+    #[test]
+    fn test_verify_update_signature_missing() {
+        assert!(verify_update_signature(FIXTURE_PAYLOAD, "").is_err());
+    }
+
+    #[test]
+    fn test_verify_update_signature_malformed() {
+        assert!(verify_update_signature(FIXTURE_PAYLOAD, "not-a-real-signature").is_err());
+    }
+
+    #[test]
+    fn test_verify_update_signature_wrong_key() {
+        // Signed with the unrelated throwaway test key generated during development,
+        // not UPDATE_PUBLIC_KEY — must be rejected.
+        let other_key_signature_b64 = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTQnFoZktnRWlTRHdMSGNaK3d1NlMvZ2xZYmx3SW1tUStTQ0dmN3h4eEtZdE9SRDJFdVlGRlZHN1hOaWM0R0JZYmJWblZvR0FWaDU1cG5LeGN6V0VTZDljODdlYzFzYWdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0OTM1NTY4CWZpbGU6cGF5bG9hZC5iaW4KNDZaWlBVeXFHV2RwczlPd3Fud0RrUlVyaXN0Sk9FMmRCd3BJQzF0T3ZpNHVMaklZU0h2L0VnVnd2YUFxSjV5ZW1FSGRUL2dGYzV1N0ZnckZZcm1HQ2c9PQo=";
+        assert!(verify_update_signature(b"test-payload", other_key_signature_b64).is_err());
     }
 }

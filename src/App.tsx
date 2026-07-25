@@ -163,20 +163,20 @@ export default function App() {
           ) : (
             <button
               onClick={async () => {
-                if (!updateInfo.downloadUrl) {
+                if (!updateInfo.downloadUrl || !updateInfo.expectedSignature) {
                   openUrl("https://github.com/GnomishGames/slimRDM/releases");
                   return;
                 }
                 if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
                 setUpdateDownloading(true);
                 try {
-                  await updates.install(updateInfo.downloadUrl, updateInfo.expectedSha256 ?? undefined);
+                  await updates.install(updateInfo.downloadUrl, updateInfo.expectedSignature, updateInfo.expectedSha256 ?? undefined);
                 } catch { /* installer launched or failed; dismiss either way */ }
                 setUpdateInfo(null);
                 setUpdateDownloading(false);
               }}
             >
-              {updateInfo.downloadUrl ? "Install" : "View Release"}
+              {updateInfo.downloadUrl && updateInfo.expectedSignature ? "Install" : "View Release"}
             </button>
           )}
         </div>

@@ -689,13 +689,13 @@ function AboutSection() {
         {updateState === "available" && updateInfo && (
           <div className="about-update-available">
             <span className="about-update-badge">v{updateInfo.latestVersion} available</span>
-            {updateInfo.downloadUrl ? (
+            {updateInfo.downloadUrl && updateInfo.expectedSignature ? (
               <button
                 className="btn btn--primary about-update-btn"
                 onClick={async () => {
                   setUpdateState("downloading");
                   try {
-                    await updates.install(updateInfo.downloadUrl!, updateInfo.expectedSha256 ?? undefined);
+                    await updates.install(updateInfo.downloadUrl!, updateInfo.expectedSignature!, updateInfo.expectedSha256 ?? undefined);
                     setUpdateState("up-to-date");
                   } catch (err) {
                     setUpdateError(String(err));
