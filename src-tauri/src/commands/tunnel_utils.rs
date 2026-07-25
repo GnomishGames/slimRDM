@@ -108,10 +108,10 @@ pub async fn open_jump_channel(
                 // Remote → local: receive data from the SSH channel
                 msg = channel.wait() => {
                     match msg {
-                        Some(ChannelMsg::Data { ref data }) => {
-                            if pipe_write.write_all(data).await.is_err() {
-                                break;
-                            }
+                        Some(ChannelMsg::Data { ref data })
+                            if pipe_write.write_all(data).await.is_err() =>
+                        {
+                            break;
                         }
                         None | Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) => break,
                         _ => {}

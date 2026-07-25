@@ -214,7 +214,7 @@ fn discover_transcripts(claude_dir: &Path) -> Vec<PathBuf> {
             if let Ok(files) = std::fs::read_dir(proj.path()) {
                 for f in files.flatten() {
                     let p = f.path();
-                    if p.is_file() && p.extension().map_or(false, |x| x == "jsonl") {
+                    if p.is_file() && p.extension().is_some_and(|x| x == "jsonl") {
                         out.push(p);
                     }
                 }

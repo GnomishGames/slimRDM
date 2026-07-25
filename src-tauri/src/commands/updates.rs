@@ -86,14 +86,14 @@ fn validate_release_url(raw: &str) -> Result<Url, String> {
 fn sanitize_filename(url: &Url) -> String {
     let name = url
         .path_segments()
-        .and_then(|s| s.last())
+        .and_then(|mut s| s.next_back())
         .filter(|s| !s.is_empty() && s.find(|c: char| c.is_ascii_control() || c == '/' || c == '\\').is_none())
         .map(|s| s.to_string())
         .unwrap_or_else(|| "installer".to_string());
     name
 }
 
-fn pick_asset<'a>(assets: &'a [GithubAsset]) -> Option<&'a GithubAsset> {
+fn pick_asset(assets: &[GithubAsset]) -> Option<&GithubAsset> {
     let running_appimage = std::env::var("APPIMAGE").is_ok();
     let preferred: &[&str] = match std::env::consts::OS {
         "linux" if running_appimage => &[".appimage", ".deb"],

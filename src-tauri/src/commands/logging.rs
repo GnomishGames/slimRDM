@@ -85,7 +85,7 @@ fn insert_link_in_section(body: &str, header: &str, link: &str) -> String {
             lines.insert(ins, link.to_string());
         }
         None => {
-            if lines.last().map_or(false, |l| !l.is_empty()) {
+            if lines.last().is_some_and(|l| !l.is_empty()) {
                 lines.push(String::new());
             }
             lines.push(header.to_string());
@@ -113,7 +113,7 @@ pub fn sweep_orphans(raw_dir: &Path) {
     if let Ok(entries) = std::fs::read_dir(raw_dir) {
         for entry in entries.flatten() {
             let p = entry.path();
-            if p.extension().map_or(false, |x| x == "raw") {
+            if p.extension().is_some_and(|x| x == "raw") {
                 let _ = std::fs::remove_file(&p);
             }
         }
@@ -396,10 +396,10 @@ pub fn clean(raw: &str) -> String {
             result.push(trimmed);
         }
     }
-    while result.first().map_or(false, |l| l.is_empty()) {
+    while result.first().is_some_and(|l| l.is_empty()) {
         result.remove(0);
     }
-    while result.last().map_or(false, |l| l.is_empty()) {
+    while result.last().is_some_and(|l| l.is_empty()) {
         result.pop();
     }
     result.join("\n")
