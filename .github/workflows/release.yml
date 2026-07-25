@@ -6,7 +6,11 @@ on:
       - 'v*'
 
 jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+
   release:
+    needs: checks
     permissions:
       contents: write
     strategy:

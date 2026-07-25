@@ -1,0 +1,9 @@
+[advisories]
+# Documented, no-patch-available transitive advisories (see CHANGELOG 1.7.4).
+# Re-evaluate whenever `cargo audit` flags a new advisory ID here.
+ignore = [
+    "RUSTSEC-2026-0118", # hickory-proto: no fix available, transitive via reqwest DNS resolution
+    "RUSTSEC-2026-0119", # hickory-proto: no fix available, transitive via reqwest DNS resolution
+    "RUSTSEC-2023-0071", # rsa: Marvin timing side-channel, no fix available, transitive via russh-keys
+    "RUSTSEC-2026-0153", # russh-cryptovec: transitive via vendored/patched russh, tracked upstream
+]
