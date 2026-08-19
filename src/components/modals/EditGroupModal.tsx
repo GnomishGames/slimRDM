@@ -3,6 +3,7 @@ import { X, FolderOpen } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { credentials, dialog } from "../../utils/tauri";
 import { AuthType, Group, LogMode } from "../../types";
+import { sortCategories } from "../../utils/ordering";
 import clsx from "clsx";
 
 
@@ -110,7 +111,7 @@ export function EditGroupModal({ group, onClose }: Props) {
             <Field label="Category">
               <select className="field-input field-select" value={categoryId} onChange={e => setCategoryId(e.target.value)}>
                 <option value="">No category</option>
-                {categories.map((c) => (
+                {sortCategories(categories).map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>

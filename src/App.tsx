@@ -13,6 +13,7 @@ import { updates, UpdateInfo } from "./utils/tauri";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { collectLeafSessionIds, computePaneLayout, countLeaves } from "./utils/paneTree";
 import "./styles.css";
+import { sortConnections } from "./utils/ordering";
 
 export default function App() {
   const {
@@ -73,8 +74,7 @@ export default function App() {
     Promise.all([loadConnections(), loadGroups(), loadCategories(), loadSettings(), loadTunnelConfigs()])
       .then(() => {
         const { connections, openSession } = useAppStore.getState();
-        connections
-          .filter((c) => c.autoConnect)
+        sortConnections(connections.filter((c) => c.autoConnect))
           .forEach((c) => openSession(c));
       });
     updates.check().then((info) => {

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.7] - 2026-08-19
+
+### Fixed
+- **Sidebar order no longer changes between launches** — categories, groups, connections and tunnels were ordered in three different places at once (the backend on load, the frontend after an edit, and nowhere at all for categories), so the list appeared in creation order at launch and snapped to alphabetical the moment any group was added or edited. Ordering now happens in one place, is case-insensitive and number-aware (`T2` before `T10`, `t5` alongside `T5`), and no longer depends on the machine's locale.
+- **Groups and connections no longer disappear when their category or group is deleted** — a group whose category no longer existed was filtered out of its category section *and* out of the top level, leaving it invisible with no way to reach it. Orphans now fall back to the top level.
+- **Backups include categories and tunnels** — exports carried only connections and groups, so importing a backup on another machine left every categorised group invisible, and importing with **Replace** silently erased all saved tunnels. The export format is now version 2; version 1 backups still import.
+- **Import and export summaries report real numbers** — the import result was serialised with the wrong key style, so every import reported *"Imported undefined connection(s) and undefined group(s)."* Both messages now list connections, groups, categories and tunnels, and the sidebar's tunnel list refreshes after an import instead of showing entries that are no longer on disk.
+- **Group and category pickers are alphabetical** — the group dropdown had the same launch-order/edit-order flip as the sidebar, and the category dropdown was never sorted at all.
+
+### Internal
+- Frontend unit tests (vitest, `npm test`) now run in CI alongside `cargo test`, clippy, and the dependency audits.
+
 ## [1.7.5] - 2026-07-10
 
 ### Fixed

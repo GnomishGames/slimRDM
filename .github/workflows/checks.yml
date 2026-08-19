@@ -65,5 +65,8 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
+      - name: Frontend tests
+        run: npm test
+
       - name: npm audit
         run: npm audit --audit-level=high

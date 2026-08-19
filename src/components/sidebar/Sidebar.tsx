@@ -8,6 +8,9 @@ import { EditGroupModal } from "../modals/EditGroupModal";
 import { SettingsModal } from "../modals/SettingsModal";
 import { TunnelList } from "./TunnelList";
 import { credentials } from "../../utils/tauri";
+import {
+  groupsInCategory, sortCategories, sortConnections, uncategorizedGroups, ungroupedConnections,
+} from "../../utils/ordering";
 import clsx from "clsx";
 
 export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
@@ -114,21 +117,21 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
     await deleteGroup(group.id);
   };
 
-  const filtered = connections.filter((c) => {
+  // Every list below is ordered by src/utils/sidebarOrder.ts and nowhere else,
+  // so the sidebar reads the same at launch as it does after an add or an edit.
+  const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    return (
+    return sortConnections(connections.filter((c) =>
       c.label.toLowerCase().includes(q) ||
       c.host.toLowerCase().includes(q) ||
       c.username.toLowerCase().includes(q)
-    );
-  });
+    ));
+  }, [connections, searchQuery]);
 
-  const ungrouped = filtered.filter((c) => !c.groupId);
-
-  // Separate groups by category membership
-  const categorizedGroups = (catId: string) =>
-    groups.filter((g) => g.categoryId === catId);
-  const uncategorizedGroups = groups.filter((g) => !g.categoryId);
+  const sortedCategories = useMemo(() => sortCategories(categories), [categories]);
+  const rootGroups = useMemo(() => uncategorizedGroups(groups, categories), [groups, categories]);
+  const ungrouped = useMemo(() => ungroupedConnections(filtered, groups), [filtered, groups]);
+  const categorizedGroups = (catId: string) => groupsInCategory(groups, catId);
 
   return (
     <>
@@ -171,7 +174,7 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
 
         <div className="connection-list">
           {/* Categories with their groups */}
-          {categories.map((cat) => {
+          {sortedCategories.map((cat) => {
             const catGroups = categorizedGroups(cat.id);
             const catConnCount = catGroups.reduce(
               (sum, g) => sum + filtered.filter((c) => c.groupId === g.id).length, 0
@@ -212,8 +215,8 @@ export function Sidebar({ onOpenAddModal }: { onOpenAddModal: () => void }) {
             );
           })}
 
-          {/* Uncategorized groups */}
-          {uncategorizedGroups.map((group) => (
+          {/* Groups with no category — plus any orphaned by a deleted category */}
+          {rootGroups.map((group) => (
             <GroupSection
               key={group.id}
               group={group}

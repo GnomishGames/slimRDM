@@ -22,4 +22,6 @@ https://github.com/GnomishGames/slimRDM
 
 **SSH EOF → tab close** — Rust SSH loop uses `tokio::select!` on disconnect channel + `channel_eof` handler. This is what makes `exit` in the shell close the tab.
 
+**Sidebar ordering** — every list the sidebar renders (categories, groups, connections, tunnels) is ordered in `src/utils/ordering.ts` and nowhere else. The Rust `list_*` commands and the appStore mutations deliberately do **not** sort; adding a sort back to either reintroduces the bug where order depended on which code path last touched the array.
+
 **Credential storage** — passwords go in OS keyring under `host:port:username`, not in `slimrdm.json`. Connection record stores a `credentialRef` string.

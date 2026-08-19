@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Network, Plus, Play, Square, ChevronDown, ChevronRight } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { TunnelModal } from "../modals/TunnelModal";
 import { TunnelConfig, TunnelRuntime } from "../../types";
 import clsx from "clsx";
+import { sortTunnels } from "../../utils/ordering";
 
 export function TunnelList() {
   const tunnelConfigs = useAppStore((s) => s.tunnelConfigs);
@@ -12,6 +13,8 @@ export function TunnelList() {
   const disconnectTunnel = useAppStore((s) => s.disconnectTunnel);
   const deleteTunnelConfig = useAppStore((s) => s.deleteTunnelConfig);
   const connections = useAppStore((s) => s.connections);
+
+  const sortedConfigs = useMemo(() => sortTunnels(tunnelConfigs), [tunnelConfigs]);
 
   const [expanded, setExpanded] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -40,7 +43,7 @@ export function TunnelList() {
             {tunnelConfigs.length === 0 ? (
               <div className="tunnel-empty">No tunnels saved</div>
             ) : (
-              tunnelConfigs.map((cfg) => (
+              sortedConfigs.map((cfg) => (
                 <TunnelItem
                   key={cfg.id}
                   config={cfg}

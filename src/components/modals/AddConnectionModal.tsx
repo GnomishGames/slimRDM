@@ -6,6 +6,7 @@ import { credentials, dialog } from "../../utils/tauri";
 import { FolderOpen } from "lucide-react";
 import { Group } from "../../types";
 import { Connection, ConnectionType, AuthType, LogMode } from "../../types";
+import { sortConnections, sortGroups } from "../../utils/ordering";
 import clsx from "clsx";
 
 interface Props {
@@ -49,8 +50,8 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
   const [saving, setSaving] = useState(false);
 
   const { connections } = useAppStore();
-  const sshConnections = connections.filter(
-    (c) => c.connectionType === "ssh" && c.id !== editing?.id
+  const sshConnections = sortConnections(
+    connections.filter((c) => c.connectionType === "ssh" && c.id !== editing?.id)
   );
 
   const selectedGroup = groups.find((g: Group) => g.id === groupId);
@@ -277,7 +278,7 @@ export function AddConnectionModal({ onClose, editing, prefill }: Props) {
             <Field label="Group">
               <select className="field-input field-select" value={groupId} onChange={e => { setGroupId(e.target.value); setUseGroupCredentials(false); }}>
                 <option value="">No group</option>
-                {groups.map((g: Group) => (
+                {sortGroups(groups).map((g: Group) => (
                   <option key={g.id} value={g.id}>{g.name}</option>
                 ))}
               </select>

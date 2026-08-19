@@ -124,7 +124,12 @@ export const data = {
     invoke("export_data", { path }),
 
   import: (path: string, replace: boolean) =>
-    invoke<{ connectionsAdded: number; groupsAdded: number }>("import_data", { path, replace }),
+    invoke<{
+      connectionsAdded: number;
+      groupsAdded: number;
+      categoriesAdded: number;
+      tunnelsAdded: number;
+    }>("import_data", { path, replace }),
 };
 
 export interface UpdateInfo {

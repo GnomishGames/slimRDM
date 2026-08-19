@@ -107,21 +107,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addConnection: async (conn) => {
     const added = await invoke<Connection>("add_connection", { connection: conn });
-    set((s) => {
-      const connections = [...s.connections, added];
-      connections.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
-      return { connections };
-    });
+    set((s) => ({ connections: [...s.connections, added] }));
     return added;
   },
 
   updateConnection: async (conn) => {
     const updated = await invoke<Connection>("update_connection", { connection: conn });
-    set((s) => {
-      const connections = s.connections.map((c) => (c.id === updated.id ? updated : c));
-      connections.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
-      return { connections };
-    });
+    set((s) => ({ connections: s.connections.map((c) => (c.id === updated.id ? updated : c)) }));
   },
 
   deleteConnection: async (id) => {
@@ -131,21 +123,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addGroup: async (group) => {
     const added = await invoke<Group>("add_group", { group });
-    set((s) => {
-      const groups = [...s.groups, added];
-      groups.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-      return { groups };
-    });
+    set((s) => ({ groups: [...s.groups, added] }));
     return added;
   },
 
   updateGroup: async (group) => {
     const updated = await invoke<Group>("update_group", { group });
-    set((s) => {
-      const groups = s.groups.map((g) => (g.id === updated.id ? updated : g));
-      groups.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-      return { groups };
-    });
+    set((s) => ({ groups: s.groups.map((g) => (g.id === updated.id ? updated : g)) }));
   },
 
   deleteGroup: async (id) => {

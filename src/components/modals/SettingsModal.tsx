@@ -549,7 +549,10 @@ function LoggingSection() {
 }
 
 function DataSection() {
-  const { connections, groups, loadConnections, loadGroups, loadCategories } = useAppStore();
+  const {
+    connections, groups, tunnelConfigs,
+    loadConnections, loadGroups, loadCategories, loadTunnelConfigs,
+  } = useAppStore();
   const [importMode, setImportMode] = useState<"merge" | "replace">("merge");
   const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -561,7 +564,11 @@ function DataSection() {
     setStatus(null);
     try {
       await data.export(path as string);
-      setStatus({ type: "ok", msg: `Exported ${connections.length} connection(s) and ${groups.length} group(s).` });
+      setStatus({
+        type: "ok",
+        msg: `Exported ${connections.length} connection(s), ${groups.length} group(s), `
+          + `and ${tunnelConfigs.length} tunnel(s), with their categories.`,
+      });
     } catch (err) {
       setStatus({ type: "err", msg: String(err) });
     } finally {
@@ -576,8 +583,13 @@ function DataSection() {
     setStatus(null);
     try {
       const result = await data.import(path as string, importMode === "replace");
-      await Promise.all([loadConnections(), loadGroups(), loadCategories()]);
-      setStatus({ type: "ok", msg: `Imported ${result.connectionsAdded} connection(s) and ${result.groupsAdded} group(s).` });
+      await Promise.all([loadConnections(), loadGroups(), loadCategories(), loadTunnelConfigs()]);
+      setStatus({
+        type: "ok",
+        msg: `Imported ${result.connectionsAdded} connection(s), ${result.groupsAdded} group(s), `
+          + `${result.categoriesAdded} categor${result.categoriesAdded === 1 ? "y" : "ies"}, `
+          + `and ${result.tunnelsAdded} tunnel(s).`,
+      });
     } catch (err) {
       setStatus({ type: "err", msg: String(err) });
     } finally {

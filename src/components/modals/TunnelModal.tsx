@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { X } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { TunnelConfig } from "../../types";
+import { sortConnections } from "../../utils/ordering";
 
 interface Props {
   editing?: TunnelConfig;
@@ -12,7 +13,7 @@ export function TunnelModal({ editing, onClose }: Props) {
   const { connections, addTunnelConfig, editTunnelConfig } = useAppStore();
   const mouseDownOnBackdrop = useRef(false);
 
-  const sshConnections = connections.filter((c) => c.connectionType === "ssh");
+  const sshConnections = sortConnections(connections.filter((c) => c.connectionType === "ssh"));
 
   const [name, setName] = useState(editing?.name ?? "");
   const [jumpHostId, setJumpHostId] = useState(editing?.jumpHostId ?? sshConnections[0]?.id ?? "");

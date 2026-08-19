@@ -28,10 +28,7 @@ pub(crate) fn save_store(app: &tauri::AppHandle, data: &AppStore) -> Result<()> 
 #[tauri::command]
 pub async fn list_connections(app: tauri::AppHandle) -> std::result::Result<Vec<Connection>, String> {
     load_store(&app)
-        .map(|mut s| {
-            s.connections.sort_by_key(|c| c.label.to_lowercase());
-            s.connections
-        })
+        .map(|s| s.connections)
         .map_err(|e| e.to_string())
 }
 
