@@ -13,6 +13,7 @@
 - **Self-updates now require a verified signature** — the in-app updater downloaded and ran an installer with no integrity check, so a compromised GitHub release could have delivered arbitrary executable code (audit finding, High). Updates now require a detached Minisign signature, verified against an embedded public key before the installer is written to disk; where no signature is published, the app links to the releases page instead of offering an in-app install. Every release installer is signed in CI and its `.sig` published alongside it.
 - **postcss path traversal advisory (GHSA-r28c-9q8g-f849, high)** resolved — `postcss` and `nanoid` bumped transitively.
 - **nanoid infinite-loop advisory (GHSA-2v37-7h3g-55p8, high)** resolved — `nanoid` bumped to 3.3.18 via `postcss`.
+- **h2 unbounded empty DATA frames (RUSTSEC-2026-0258)** resolved — `h2` bumped to 0.4.16, transitively via `reqwest`/`hyper`.
 
 ### Internal
 - CI now enforces mandatory gates on every push: `cargo test`, `cargo clippy -D warnings`, `cargo audit`, `tsc --noEmit`, `npm audit`, and frontend unit tests (vitest, `npm test`).
