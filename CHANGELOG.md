@@ -18,6 +18,7 @@
 ### Internal
 - CI now enforces mandatory gates on every push: `cargo test`, `cargo clippy -D warnings`, `cargo audit`, `tsc --noEmit`, `npm audit`, and frontend unit tests (vitest, `npm test`).
 - Clippy lints cleared across the Rust source ahead of the `-D warnings` gate.
+- CI installs system dependencies with a per-attempt timeout and up to three retries, and every job now has a `timeout-minutes` cap — a hung apt mirror previously stalled a release build for over half an hour instead of failing and being re-runnable.
 - `docs/signing_steps.md` documents the update-signing key handoff.
 
 ## [1.7.6] - 2026-07-18
