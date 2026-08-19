@@ -9,8 +9,19 @@
 - **Import and export summaries report real numbers** — the import result was serialised with the wrong key style, so every import reported *"Imported undefined connection(s) and undefined group(s)."* Both messages now list connections, groups, categories and tunnels, and the sidebar's tunnel list refreshes after an import instead of showing entries that are no longer on disk.
 - **Group and category pickers are alphabetical** — the group dropdown had the same launch-order/edit-order flip as the sidebar, and the category dropdown was never sorted at all.
 
+### Security
+- **Self-updates now require a verified signature** — the in-app updater downloaded and ran an installer with no integrity check, so a compromised GitHub release could have delivered arbitrary executable code (audit finding, High). Updates now require a detached Minisign signature, verified against an embedded public key before the installer is written to disk; where no signature is published, the app links to the releases page instead of offering an in-app install. Every release installer is signed in CI and its `.sig` published alongside it.
+- **postcss path traversal advisory (GHSA-r28c-9q8g-f849, high)** resolved — `postcss` and `nanoid` bumped transitively.
+
 ### Internal
-- Frontend unit tests (vitest, `npm test`) now run in CI alongside `cargo test`, clippy, and the dependency audits.
+- CI now enforces mandatory gates on every push: `cargo test`, `cargo clippy -D warnings`, `cargo audit`, `tsc --noEmit`, `npm audit`, and frontend unit tests (vitest, `npm test`).
+- Clippy lints cleared across the Rust source ahead of the `-D warnings` gate.
+- `docs/signing_steps.md` documents the update-signing key handoff.
+
+## [1.7.6] - 2026-07-18
+
+### Added
+- **Terminal renderer is now selectable** — Settings → Appearance offers *WebGL (GPU)* or *DOM (compatible)*. 1.7.3 moved every terminal to the WebGL renderer to fix corruption during full-screen redraws; this makes it a choice, so machines where GPU rendering misbehaves can fall back to the DOM renderer without giving up the fix elsewhere. Defaults to WebGL, and applies to both SSH and local terminals.
 
 ## [1.7.5] - 2026-07-10
 
