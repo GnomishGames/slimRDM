@@ -11,7 +11,14 @@ const RELEASES_API: &str = "https://api.github.com/repos/GnomishGames/slimRDM/re
 /// Minisign public key used to verify release update signatures, generated via
 /// `npx tauri signer generate`. The matching private key is held outside the repo;
 /// CI signs each release asset with it (see .github/workflows/release.yml).
-const UPDATE_PUBLIC_KEY: &str = "RWTrdjD/xZnfj9OtLtKJwGotGDdN8+1OiWXxB7lyK/OQk7gOX1Mjqdtl";
+///
+/// Key id `6090565b549ea78f`, in use from 1.7.8. It replaced the placeholder key
+/// `eb7630ffc599df8f` that shipped in 1.7.7 while the feature was being built;
+/// that key's private half was never held by the maintainer, so 1.7.7 cannot
+/// verify any later release and is withdrawn in favour of a direct install.
+/// Rotating this constant strands every already-installed build that embeds the
+/// previous key, so it is not a routine change.
+const UPDATE_PUBLIC_KEY: &str = "RWRgkFZbVJ6nj0xUuXSV2i2M7e9btz2Ys2YFx0oMcT7Lc+U2qKF/gbP/";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -125,7 +132,21 @@ async fn fetch_expected_sha256(
         .text()
         .await
         .ok()?;
-    body.split_whitespace().next().map(|s| s.to_string())
+    parse_sha256_sidecar(&body)
+}
+
+/// Pulls the digest out of a `sha256sum` / `shasum -a 256` sidecar, whose first
+/// field is the hex digest (`<digest>  <filename>`). Anything that isn't a
+/// 64-character hex digest is treated as no checksum rather than as a mismatch:
+/// the sidecar is unsigned, so it is a corruption check layered behind the
+/// Minisign signature, and a malformed one must not wedge updates.
+fn parse_sha256_sidecar(body: &str) -> Option<String> {
+    let digest = body.split_whitespace().next()?;
+    if digest.len() == 64 && digest.chars().all(|c| c.is_ascii_hexdigit()) {
+        Some(digest.to_ascii_lowercase())
+    } else {
+        None
+    }
 }
 
 /// Fetches the `.sig` sidecar produced by `tauri signer sign` (base64-encoded
@@ -341,6 +362,49 @@ mod tests {
         assert_eq!(sanitize_filename(&url), "installer");
     }
 
+    // The exact shape CI publishes: `sha256sum <file> > <file>.sha256`
+    // (.github/workflows/release.yml). macOS uses `shasum -a 256`, which emits
+    // the same two-field format.
+    const SIDECAR_DIGEST: &str = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+
+    #[test]
+    fn test_parse_sha256_sidecar_gnu_format() {
+        let body = format!("{SIDECAR_DIGEST}  SlimRDM_1.7.7_x64-setup.exe\n");
+        assert_eq!(parse_sha256_sidecar(&body).as_deref(), Some(SIDECAR_DIGEST));
+    }
+
+    #[test]
+    fn test_parse_sha256_sidecar_bsd_shasum_format() {
+        // `shasum -a 256` on macOS separates with a space and a mode marker.
+        let body = format!("{SIDECAR_DIGEST} *SlimRDM_1.7.7_universal.dmg\n");
+        assert_eq!(parse_sha256_sidecar(&body).as_deref(), Some(SIDECAR_DIGEST));
+    }
+
+    #[test]
+    fn test_parse_sha256_sidecar_bare_digest() {
+        assert_eq!(
+            parse_sha256_sidecar(SIDECAR_DIGEST).as_deref(),
+            Some(SIDECAR_DIGEST)
+        );
+    }
+
+    #[test]
+    fn test_parse_sha256_sidecar_uppercase_is_normalized() {
+        let body = SIDECAR_DIGEST.to_ascii_uppercase();
+        assert_eq!(parse_sha256_sidecar(&body).as_deref(), Some(SIDECAR_DIGEST));
+    }
+
+    #[test]
+    fn test_parse_sha256_sidecar_rejects_non_digest() {
+        // An error page or truncated upload must read as "no checksum", not as a
+        // mismatch that blocks the update.
+        assert_eq!(parse_sha256_sidecar("<!DOCTYPE html><html>404"), None);
+        assert_eq!(parse_sha256_sidecar(""), None);
+        assert_eq!(parse_sha256_sidecar("   \n"), None);
+        assert_eq!(parse_sha256_sidecar("deadbeef  short.exe"), None);
+        assert_eq!(parse_sha256_sidecar(&"z".repeat(64)), None);
+    }
+
     #[test]
     fn test_parse_version() {
         assert_eq!(parse_version("v1.7.2"), Some((1, 7, 2)));
@@ -359,8 +423,14 @@ mod tests {
     // UPDATE_PUBLIC_KEY's private key via `tauri signer sign`. Signatures don't
     // reveal the private key, so pinning one here is safe and gives real
     // regression coverage for the embedded production key.
+    //
+    // Regenerate both this and RETIRED_KEY_SIGNATURE_B64's role whenever
+    // UPDATE_PUBLIC_KEY changes:
+    //   printf '%s' 'slimrdm-update-signature-test-fixture' > fixture.bin
+    //   npx tauri signer sign -f ~/.tauri/slimrdm-updater.key fixture.bin
+    // then paste the contents of fixture.bin.sig below.
     const FIXTURE_PAYLOAD: &[u8] = b"slimrdm-update-signature-test-fixture";
-    const FIXTURE_SIGNATURE_B64: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUcmRqRC94Wm5mai92U2FEbkFoSXNjVXNHZml5MkFBU1ZQWjduREZmcVB2d2N4S0w0NGxoYlJ2K3BRUHlrcEJYblNXczBYUGxlWUtVMXMwY0Z6RWJLQTRPOGtORndiUFFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0OTM1NjQyCWZpbGU6Zml4dHVyZS5iaW4KSGNwd2NBRW1xdHhxclA2eGNuaGF3Rk9EQytmNW5oTXBQZEw2azlLM2VxdTNIOVJqZjVXZ050MUY4WG1VK1dBb2tlLzM0Rm9XTk1rQkxUbzJydjNLQkE9PQo=";
+    const FIXTURE_SIGNATURE_B64: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZ2tGWmJWSjZuank1OTgwTWs3MlUvQnkxL09SdkRob2VMMXh3dlVwOGJ3VU80UjVLbzkxSUJ4dEtCVWxYQ25TOUV1QkZ5VlJrMHBsWnhmYnZ0ZFJBNXl4amdqMzA5REFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MjI5MTA0CWZpbGU6Zml4dHVyZS5iaW4Kdnc0RHlabU9uVE1NSy9raHNzNnQyYXBaRUVwUHNkc2pkMlZubUk1c0ttVXoxbW9rcnJ5V0NLNDVMYUZTbTNBbVNRdzRZa0tULzFSLzBudTVCdGVzQVE9PQo=";
 
     #[test]
     fn test_verify_update_signature_valid() {
@@ -381,6 +451,16 @@ mod tests {
     #[test]
     fn test_verify_update_signature_malformed() {
         assert!(verify_update_signature(FIXTURE_PAYLOAD, "not-a-real-signature").is_err());
+    }
+
+    // FIXTURE_PAYLOAD signed by the retired 1.7.7 placeholder key
+    // (id eb7630ffc599df8f). The rotation is only real if this no longer
+    // verifies, so pin it rather than deleting it.
+    const RETIRED_KEY_SIGNATURE_B64: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUcmRqRC94Wm5mai92U2FEbkFoSXNjVXNHZml5MkFBU1ZQWjduREZmcVB2d2N4S0w0NGxoYlJ2K3BRUHlrcEJYblNXczBYUGxlWUtVMXMwY0Z6RWJLQTRPOGtORndiUFFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0OTM1NjQyCWZpbGU6Zml4dHVyZS5iaW4KSGNwd2NBRW1xdHhxclA2eGNuaGF3Rk9EQytmNW5oTXBQZEw2azlLM2VxdTNIOVJqZjVXZ050MUY4WG1VK1dBb2tlLzM0Rm9XTk1rQkxUbzJydjNLQkE9PQo=";
+
+    #[test]
+    fn test_verify_update_signature_rejects_retired_key() {
+        assert!(verify_update_signature(FIXTURE_PAYLOAD, RETIRED_KEY_SIGNATURE_B64).is_err());
     }
 
     #[test]

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.8] - 2026-08-19
+
+### Security
+- **Self-update signatures are live** — 1.7.7 shipped the Minisign verification code, but no signing key had ever been configured in CI, so no release carried a `.sig` and the in-app updater fell back to *View Release* for every update. Release installers are now signed during the build and publish a matching `.sig` alongside them, so updates are verified against the embedded public key before anything is written to disk.
+- **Update signing key rotated** — the embedded public key was a placeholder generated while developing the feature. It has been replaced with a key held by the project maintainer, whose private half exists only in their password manager and as a GitHub Actions secret. Because 1.7.7 is the only build carrying the placeholder key, it cannot verify 1.7.8 and has been withdrawn; install 1.7.8 directly. Releases 1.7.6 and earlier have no update verification and upgrade normally.
+- **Release checksums are published** — the updater has always looked for a `<installer>.sha256` sidecar to check a download against, but the release workflow never produced one, so that check was dead code on every release. CI now writes and publishes a checksum beside each installer, which also gives manual downloads something to verify with `sha256sum -c`. It sits behind the signature rather than beside it: the sidecar is unsigned, so a malformed one is treated as “no checksum” instead of a mismatch that would block an otherwise valid update.
+
 ## [1.7.7] - 2026-08-19
 
 ### Fixed

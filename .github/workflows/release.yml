@@ -119,7 +119,7 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-      - name: Sign release installers
+      - name: Sign and checksum release installers
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -128,6 +128,15 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
+
+          # macOS runners have shasum but no sha256sum; Linux and Git-bash have both.
+          sha256_of() {
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$1"
+            else
+              shasum -a 256 "$1"
+            fi
+          }
 
           bundle_dir="src-tauri/target/release/bundle"
           if [ "${{ matrix.platform }}" = "macos-latest" ]; then
@@ -141,7 +150,26 @@ jobs:
             "$bundle_dir"/dmg/*.dmg
           )
 
-          for installer in "${installers[@]}"; do
+          # The macOS runners still ship bash 3.2, where expanding an empty array
+          # under `set -u` aborts with "unbound variable", so guard the expansion
+          # and count what actually got signed instead of testing the array length.
+          signed=0
+          for installer in ${installers[@]+"${installers[@]}"}; do
             npx tauri signer sign "$installer"
-            gh release upload "${{ github.ref_name }}" "${installer}.sig" --clobber --repo "${{ github.repository }}"
+            # Written with the bare filename so `sha256sum -c <file>.sha256` works
+            # in the directory a user downloaded the installer into.
+            ( cd "$(dirname "$installer")" && sha256_of "$(basename "$installer")" > "$(basename "$installer").sha256" )
+            gh release upload "${{ github.ref_name }}" \
+              "${installer}.sig" \
+              "${installer}.sha256" \
+              --clobber --repo "${{ github.repository }}"
+            signed=$((signed + 1))
           done
+
+          # nullglob means a changed bundle layout would otherwise sign nothing,
+          # leave the installers unsigned, and still report success.
+          if [ "$signed" -eq 0 ]; then
+            echo "::error::no installers found under $bundle_dir"
+            exit 1
+          fi
+          echo "signed and checksummed $signed installer(s)"
