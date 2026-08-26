@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.7.9] - 2026-08-26
+
+### Fixed
+- **Ctrl+C and other modifier combinations now reach RDP sessions** — pressing Ctrl+C in a remote PowerShell window typed a literal `c` instead of interrupting the running command. The webview never delivers a keydown for a bare modifier key, only the keyup, so the server was never told Ctrl had gone down and every modified keystroke arrived unmodified — while the keyup still sent a release for a key the server had never seen pressed. Modifier state is now derived from the modifier flags that each key and mouse event carries rather than from modifier key events, which fixes Ctrl+click multi-select, Shift+click range-select and Ctrl+wheel zoom in the same stroke. AltGr chords on non-US layouts (AltGr+Q for `@`) are handled explicitly, and a modifier held when the window loses focus is released on the remote instead of sticking down.
+
+### Internal
+- RDP input commands are synchronous, so a modifier press and the keystroke it modifies can no longer reach the server out of order — as `async` commands each was spawned as its own task, which only became reachable once a press and its key started leaving the frontend in the same tick.
+- The build is warning-free: a binding orphaned by the Cisco auth patch removed, upstream russh dead-code fields annotated rather than deleted so the vendored copy stays diffable, and xterm/react split into their own chunks so Vite's 500 kB advisory no longer fires.
+- Frontend unit tests cover the modifier reconciliation, including the two platform quirks behind this bug: a modifier's own keyup reporting `ctrlKey: true`, and AltGr arriving with `altKey` unset.
+
 ## [1.7.8] - 2026-08-19
 
 ### Security
