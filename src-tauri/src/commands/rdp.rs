@@ -467,24 +467,28 @@ pub async fn rdp_disconnect(session_id: String) -> Result<(), String> {
     Ok(())
 }
 
+// Input forwarding is deliberately synchronous: these are plain channel sends
+// with nothing to await, and an `async` command would be spawned as its own
+// task, losing the order the frontend emitted the events in. Order matters —
+// a modifier press must reach the server before the key or click it modifies.
 #[tauri::command]
-pub async fn rdp_mouse_event(session_id: String, flags: u16, x: u16, y: u16, wheel_units: i16) -> Result<(), String> {
+pub fn rdp_mouse_event(session_id: String, flags: u16, x: u16, y: u16, wheel_units: i16) -> Result<(), String> {
     send_input(&session_id, SessionInput::MouseEvent { flags, x, y, wheel_units })
 }
 
 #[tauri::command]
-pub async fn rdp_key_event(session_id: String, flags: u8, scancode: u8) -> Result<(), String> {
+pub fn rdp_key_event(session_id: String, flags: u8, scancode: u8) -> Result<(), String> {
     send_input(&session_id, SessionInput::KeyEvent { flags, scancode })
 }
 
 #[tauri::command]
-pub async fn rdp_type_text(session_id: String, text: String) -> Result<(), String> {
+pub fn rdp_type_text(session_id: String, text: String) -> Result<(), String> {
     let chars: Vec<u16> = text.encode_utf16().collect();
     send_input(&session_id, SessionInput::UnicodeText(chars))
 }
 
 #[tauri::command]
-pub async fn rdp_resize(session_id: String, width: u16, height: u16) -> Result<(), String> {
+pub fn rdp_resize(session_id: String, width: u16, height: u16) -> Result<(), String> {
     send_input(&session_id, SessionInput::Resize { width, height })
 }
 

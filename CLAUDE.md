@@ -24,4 +24,6 @@ https://github.com/GnomishGames/slimRDM
 
 **Sidebar ordering** — every list the sidebar renders (categories, groups, connections, tunnels) is ordered in `src/utils/ordering.ts` and nowhere else. The Rust `list_*` commands and the appStore mutations deliberately do **not** sort; adding a sort back to either reintroduces the bug where order depended on which code path last touched the array.
 
+**RDP modifier keys** — WebKitGTK with an ibus IM context never delivers a `keydown` for a bare modifier key (only the keyup), so remote modifier state is reconciled from each event's `ctrlKey`/`altKey`/`shiftKey`/`metaKey` flags in `src/utils/rdpKeyboard.ts` — **not** from modifier key events. Driving it from modifier keydowns is the obvious-looking approach and silently reintroduces the bug where Ctrl+C typed a literal "c". Two rules the platform forces: a modifier's own event uses the event type rather than the flag (the Control keyup reports `ctrlKey: true`), and a key release never synthesizes a modifier press.
+
 **Credential storage** — passwords go in OS keyring under `host:port:username`, not in `slimrdm.json`. Connection record stores a `credentialRef` string.

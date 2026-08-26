@@ -4,6 +4,13 @@ import { rdp, clipboard } from "../utils/tauri";
 import { useAppStore } from "../store/appStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { Connection, SessionStatus } from "../types";
+import {
+  ModifierAction,
+  isModifierCode,
+  keyEventLike,
+  reconcileModifiers,
+  releaseHeldKeys,
+} from "../utils/rdpKeyboard";
 
 // RDP PointerFlags (from MS-RDPBCGR §2.2.8.1.2.2)
 const PTR_MOVE        = 0x0800;
@@ -120,6 +127,14 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
   const closePane = useAppStore((s) => s.closePane);
   const rdpDefaults = useSettingsStore((s) => s.rdpDefaults);
   const connectedRef = useRef(false);
+  // Scancodes of the modifiers the remote currently believes are down. The
+  // webview does not deliver a keydown for bare modifier keys on every
+  // platform, so this is reconciled from each event's modifier flags rather
+  // than driven by modifier key events. See utils/rdpKeyboard.ts.
+  const heldModifiersRef = useRef<Set<string>>(new Set());
+  // Ordinary (non-modifier) keys the remote believes are down, so a key held
+  // when focus leaves doesn't auto-repeat on the remote forever.
+  const heldKeysRef = useRef<Set<string>>(new Set());
   const pendingFramesRef = useRef<PendingFrame[]>([]);
   const rafIdRef = useRef<number | null>(null);
 
@@ -242,6 +257,48 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
   }
 
   // Forward mouse events
+  const sendKey = useCallback((code: string, pressed: boolean) => {
+    const entry = SCANCODE[code];
+    if (!entry) return;
+    const flags = (pressed ? KEY_DOWN : KEY_RELEASE) | (entry.extended ? KEY_EXTENDED : 0);
+    rdp.keyEvent(sessionId, flags, entry.code).catch(() => {});
+  }, [sessionId]);
+
+  const applyModifiers = useCallback((actions: ModifierAction[]) => {
+    for (const { code, pressed } of actions) sendKey(code, pressed);
+  }, [sendKey]);
+
+  // Bring the remote's modifier state in line with this event before sending the
+  // keystroke or click it modifies. Every key and mouse event carries the
+  // modifier flags, which is the only reliable source — see utils/rdpKeyboard.ts.
+  const syncModifiers = useCallback((
+    e: React.KeyboardEvent | React.MouseEvent | React.WheelEvent,
+    isPress: boolean,
+  ) => {
+    applyModifiers(reconcileModifiers(heldModifiersRef.current, keyEventLike(e), isPress));
+  }, [applyModifiers]);
+
+  const releaseModifiers = useCallback(() => {
+    applyModifiers(releaseHeldKeys(heldModifiersRef.current));
+  }, [applyModifiers]);
+
+  // Release everything the remote thinks is held when we lose focus. The matching
+  // keyups go to whoever took focus, not to us, so without this an Alt-Tab while
+  // holding Ctrl leaves Ctrl down, and one while holding ArrowDown leaves the
+  // remote auto-repeating it.
+  const releaseHeldInput = useCallback(() => {
+    applyModifiers(releaseHeldKeys(heldKeysRef.current));
+    releaseModifiers();
+  }, [applyModifiers, releaseModifiers]);
+
+  // Window blur covers Alt-Tab (the canvas keeps DOM focus); the canvas's own
+  // onBlur covers focus moving elsewhere inside the app.
+  useEffect(() => {
+    window.addEventListener("blur", releaseHeldInput);
+    return () => window.removeEventListener("blur", releaseHeldInput);
+  }, [releaseHeldInput]);
+
+
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
     const { x, y } = canvasCoords(e);
@@ -250,20 +307,25 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
 
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
+    // Ctrl+click / Shift+click need the modifier actually down on the remote,
+    // and a click may be the first event to reveal that it is held.
+    syncModifiers(e, true);
     const { x, y } = canvasCoords(e);
     const flags = e.button === 0 ? PTR_LEFT_DOWN : e.button === 2 ? PTR_RIGHT_DOWN : PTR_MID_DOWN;
     rdp.mouseEvent(sessionId, flags, x, y, 0).catch(() => {});
-  }, [sessionId]);
+  }, [sessionId, syncModifiers]);
 
   const onMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
+    syncModifiers(e, false);
     const { x, y } = canvasCoords(e);
     const flags = e.button === 0 ? PTR_LEFT_UP : e.button === 2 ? PTR_RIGHT_UP : PTR_MID_UP;
     rdp.mouseEvent(sessionId, flags, x, y, 0).catch(() => {});
-  }, [sessionId]);
+  }, [sessionId, syncModifiers]);
 
   const onWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
+    syncModifiers(e, true); // Ctrl+wheel zoom
     const { x, y } = canvasCoords(e);
     const rawDelta = e.deltaMode === 1
       ? Math.abs(e.deltaY) * 40   // line mode: scale up to pixel-equivalent
@@ -271,16 +333,16 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
     const units = Math.max(1, Math.min(255, Math.round(rawDelta)));
     const flags = PTR_WHEEL | (e.deltaY > 0 ? PTR_WHEEL_NEG : 0);
     rdp.mouseEvent(sessionId, flags, x, y, units).catch(() => {});
-  }, [sessionId]);
+  }, [sessionId, syncModifiers]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
 
     if (e.ctrlKey && e.code === "KeyV") {
       e.preventDefault();
-      // Release Ctrl on the remote before typing so modifier state doesn't interfere
-      const ctrlEntry = SCANCODE[e.location === 2 ? "ControlRight" : "ControlLeft"];
-      if (ctrlEntry) rdp.keyEvent(sessionId, KEY_RELEASE | (ctrlEntry.extended ? KEY_EXTENDED : 0), ctrlEntry.code).catch(() => {});
+      // Release held modifiers on the remote before typing so modifier state
+      // doesn't interfere with the pasted text.
+      releaseModifiers();
       clipboard.getSystem()
         .then((text) => { if (text) rdp.typeText(sessionId, text).catch(() => {}); })
         .catch(() => {});
@@ -288,20 +350,24 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
     }
 
     e.preventDefault();
-    const entry = SCANCODE[e.code];
-    if (!entry) return;
-    const flags = (KEY_DOWN) | (entry.extended ? KEY_EXTENDED : 0);
-    rdp.keyEvent(sessionId, flags, entry.code).catch(() => {});
-  }, [sessionId]);
+    // This is what makes Ctrl+C a break rather than a literal "c".
+    syncModifiers(e, true);
+    if (isModifierCode(e.code)) return; // already sent by the sync above
+    if (SCANCODE[e.code]) heldKeysRef.current.add(e.code);
+    sendKey(e.code, true);
+  }, [sessionId, sendKey, syncModifiers, releaseModifiers]);
 
   const onKeyUp = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (!connectedRef.current) return;
     e.preventDefault();
-    const entry = SCANCODE[e.code];
-    if (!entry) return;
-    const flags = KEY_RELEASE | (entry.extended ? KEY_EXTENDED : 0);
-    rdp.keyEvent(sessionId, flags, entry.code).catch(() => {});
-  }, [sessionId]);
+    syncModifiers(e, false);
+    if (isModifierCode(e.code)) return; // already sent by the sync above
+    heldKeysRef.current.delete(e.code);
+    sendKey(e.code, false);
+  }, [sendKey, syncModifiers]);
 
-  return { onMouseMove, onMouseDown, onMouseUp, onWheel, onKeyDown, onKeyUp };
+  return {
+    onMouseMove, onMouseDown, onMouseUp, onWheel,
+    onKeyDown, onKeyUp, onBlur: releaseHeldInput,
+  };
 }

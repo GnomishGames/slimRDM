@@ -91,7 +91,7 @@ function TrmPanel({ session, active, focused }: Props) {
 
 function RdpPanel({ session }: { session: Session }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { onMouseMove, onMouseDown, onMouseUp, onWheel, onKeyDown, onKeyUp } =
+  const { onMouseMove, onMouseDown, onMouseUp, onWheel, onKeyDown, onKeyUp, onBlur } =
     useRdpCanvas({ sessionId: session.id, connection: session.connection, canvasRef });
 
   return (
@@ -107,6 +107,7 @@ function RdpPanel({ session }: { session: Session }) {
         onWheel={onWheel}
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
+        onBlur={onBlur}
         onContextMenu={(e) => e.preventDefault()}
       />
       {session.status === "connecting" && (
