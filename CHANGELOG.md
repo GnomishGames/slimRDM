@@ -8,6 +8,7 @@
 ### Internal
 - RDP input commands are synchronous, so a modifier press and the keystroke it modifies can no longer reach the server out of order — as `async` commands each was spawned as its own task, which only became reachable once a press and its key started leaving the frontend in the same tick.
 - The build is warning-free: a binding orphaned by the Cisco auth patch removed, upstream russh dead-code fields annotated rather than deleted so the vendored copy stays diffable, and xterm/react split into their own chunks so Vite's 500 kB advisory no longer fires.
+- Remote-clipboard UTF-16 decoding uses `as_chunks` instead of `chunks_exact`, satisfying the `chunks_exact_to_as_chunks` lint added in Rust 1.98. CI installs the latest stable toolchain and runs clippy with `-D warnings`, so a newly introduced lint fails the build on source that has not changed.
 - Frontend unit tests cover the modifier reconciliation, including the two platform quirks behind this bug: a modifier's own keyup reporting `ctrlKey: true`, and AltGr arriving with `altKey` unset.
 
 ## [1.7.8] - 2026-08-19

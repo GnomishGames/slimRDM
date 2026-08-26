@@ -172,8 +172,8 @@ impl CliprdrBackend for TauriCliprdrBackend {
         let data = response.data();
         let format = RDP_REQUESTED_FORMAT.lock().unwrap().remove(&self.session_id).unwrap_or(CF_UNICODETEXT);
         let text = if format == CF_UNICODETEXT {
-            let utf16: Vec<u16> = data.chunks_exact(2)
-                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            let utf16: Vec<u16> = data.as_chunks::<2>().0.iter()
+                .map(|c| u16::from_le_bytes(*c))
                 .collect();
             let trimmed: Vec<u16> = utf16.into_iter().take_while(|&c| c != 0).collect();
             String::from_utf16_lossy(&trimmed)
