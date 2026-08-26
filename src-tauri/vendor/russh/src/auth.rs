@@ -137,7 +137,12 @@ pub struct AuthRequest {
 #[derive(Debug)]
 pub enum CurrentRequest {
     PublicKey {
+        // Upstream fields: written by the server auth path, and only
+        // `sent_pk_ok` is ever read back. Kept as-is (rather than removed) so
+        // this vendored copy stays diffable against upstream russh.
+        #[allow(dead_code)]
         key: CryptoVec,
+        #[allow(dead_code)]
         algo: CryptoVec,
         sent_pk_ok: bool,
     },

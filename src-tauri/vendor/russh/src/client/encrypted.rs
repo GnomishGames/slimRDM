@@ -250,7 +250,6 @@ impl Session {
                                 auth_request.methods |= m
                             }
                         }
-                        let no_more_methods = auth_request.methods.is_empty();
                         self.common.auth_method = None;
                         self.sender
                             .send(Reply::AuthFailure)
