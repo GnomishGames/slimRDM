@@ -2,6 +2,9 @@
 
 ## [1.7.10] - 2026-09-16
 
+### Security
+- **TLS handshake validation tightened** — rustls 0.23.41 accepted TLS 1.3 handshake messages across encryption level boundaries ([RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285), published 14 September 2026). rustls is the TLS implementation behind RDP connections and their CredSSP authentication, as well as the HTTPS requests the updater makes, so it has been updated to 0.23.45.
+
 ### Fixed
 - **Remote cursor shapes appear in RDP sessions again** — hovering a window edge kept showing the ordinary arrow instead of the double-headed resize cursor, text fields never showed an I-beam, and a busy remote gave no spinner, so nothing on the remote desktop told you what a click or drag was about to do. Sessions are configured to draw the pointer client-side rather than have the server paint it into the framebuffer, which means every shape Windows picks arrives as a separate pointer update — and those updates were being decoded and then thrown away, leaving the canvas showing the local arrow for the entire session. Shapes are now applied to the canvas as they arrive, including cursors the remote hides and the oversized pointers that large-cursor accessibility settings produce, which are scaled down to fit rather than dropped.
 
