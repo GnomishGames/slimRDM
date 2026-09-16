@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.7.10] - 2026-09-16
+
+### Fixed
+- **Remote cursor shapes appear in RDP sessions again** — hovering a window edge kept showing the ordinary arrow instead of the double-headed resize cursor, text fields never showed an I-beam, and a busy remote gave no spinner, so nothing on the remote desktop told you what a click or drag was about to do. Sessions are configured to draw the pointer client-side rather than have the server paint it into the framebuffer, which means every shape Windows picks arrives as a separate pointer update — and those updates were being decoded and then thrown away, leaving the canvas showing the local arrow for the entire session. Shapes are now applied to the canvas as they arrive, including cursors the remote hides and the oversized pointers that large-cursor accessibility settings produce, which are scaled down to fit rather than dropped.
+
+### Internal
+- Only the last pointer state in an update batch is applied. Selecting a cached pointer emits a hide immediately followed by the new bitmap, so honouring both would blink the cursor off between shapes; a zero-size bitmap is the server hiding the pointer through the bitmap path and is treated as a hide rather than as a shape.
+- Cursor size and hotspot are derived from the canvas's measured layout, not `devicePixelRatio` — which only matches while the CSS size computed from it is still current — and the hotspot follows the same ratio the image is drawn at, so it stays on the shape's tip at the fractional display scales GNOME produces.
+- Unchanged shapes are suppressed by pointer identity, so a cursor resting on a window border does not re-encode and re-send a bitmap on every pointer PDU.
+- Frontend unit tests cover cursor planning and the base64 → RGBA decode now shared by the framebuffer and cursor paths.
+
 ## [1.7.9] - 2026-08-26
 
 ### Fixed
