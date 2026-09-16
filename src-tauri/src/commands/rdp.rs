@@ -14,6 +14,7 @@ use ironrdp::connector::{ClientConnector, Config, Credentials, DesktopSize, Serv
 use ironrdp::session::{ActiveStage, ActiveStageOutput};
 use ironrdp::session::image::DecodedImage;
 use ironrdp::graphics::image_processing::PixelFormat;
+use ironrdp::graphics::pointer::DecodedPointer;
 use ironrdp::pdu::input::fast_path::{FastPathInputEvent, KeyboardFlags};
 use ironrdp::pdu::input::mouse::{MousePdu, PointerFlags};
 use ironrdp::pdu::rdp::client_info::{PerformanceFlags, TimezoneInfo};
@@ -92,6 +93,42 @@ struct RdpFrameEvent {
     full_width: u16,
     full_height: u16,
     data: String, // base64 raw RGBA
+}
+
+/// A change to the remote cursor. The server never paints the pointer into the
+/// framebuffer (`pointer_software_rendering: false`), so the shape it picks —
+/// the resize arrows on a window border, the I-beam, the busy ring — only
+/// reaches the user if these updates are forwarded and drawn by the frontend.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RdpCursorEvent {
+    session_id: String,
+    kind: &'static str, // "bitmap" | "default" | "hidden"
+    width: u16,
+    height: u16,
+    hotspot_x: u16,
+    hotspot_y: u16,
+    data: String, // base64 raw RGBA, empty unless kind is "bitmap"
+}
+
+/// The cursor state the frontend has been told about, so an unchanged shape
+/// isn't re-encoded and re-sent on every pointer PDU.
+enum PointerState {
+    Default,
+    Hidden,
+    Bitmap(Arc<DecodedPointer>),
+}
+
+impl PointerState {
+    fn same_as(&self, other: &PointerState) -> bool {
+        match (self, other) {
+            (PointerState::Default, PointerState::Default) => true,
+            (PointerState::Hidden, PointerState::Hidden) => true,
+            // Repeat selections of a cached pointer hand back the same Arc.
+            (PointerState::Bitmap(a), PointerState::Bitmap(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
 }
 
 #[tauri::command]
@@ -259,6 +296,8 @@ where
     // Union of all dirty regions not yet emitted. Carried across loop iterations
     // so updates are never dropped when the frame timer isn't ready.
     let mut pending_dirty: Option<(u16, u16, u16, u16)> = None; // (left, top, right, bottom)
+    // Cursor shape the frontend is currently showing.
+    let mut last_pointer: Option<PointerState> = None;
 
     loop {
         let (outputs, resize_bytes) = tokio::select! {
@@ -291,11 +330,37 @@ where
         }
 
         let mut terminate = false;
+        // Newest cursor state in the batch wins. Selecting a cached pointer
+        // emits PointerHidden immediately followed by PointerBitmap, and
+        // applying both would blink the cursor off between shapes.
+        let mut pointer_update: Option<PointerState> = None;
         for output in outputs {
             match output {
                 ActiveStageOutput::ResponseFrame(frame) => {
                     writer.write_all(&frame).await.map_err(|e| format!("Write error: {e}"))?;
                 }
+                ActiveStageOutput::PointerBitmap(pointer) => {
+                    // ironrdp decodes a 0x0 pointer attribute into its
+                    // `new_invisible()` pointer — the server hiding the cursor
+                    // through the bitmap path. Forwarding that as a bitmap
+                    // would leave the frontend with nothing to draw, and the
+                    // PointerHidden that precedes it is coalesced away here.
+                    pointer_update = Some(if pointer.width == 0 || pointer.height == 0 {
+                        PointerState::Hidden
+                    } else {
+                        PointerState::Bitmap(pointer)
+                    });
+                }
+                ActiveStageOutput::PointerDefault => {
+                    pointer_update = Some(PointerState::Default);
+                }
+                ActiveStageOutput::PointerHidden => {
+                    pointer_update = Some(PointerState::Hidden);
+                }
+                // The server asking to warp the pointer. A webview can't move
+                // the host cursor, and honouring it by moving the drawn cursor
+                // alone would just put it somewhere the real mouse isn't.
+                ActiveStageOutput::PointerPosition { .. } => {}
                 ActiveStageOutput::GraphicsUpdate(region) => {
                     // Merge into pending dirty union — never drop a region
                     pending_dirty = Some(match pending_dirty {
@@ -310,6 +375,20 @@ where
                 }
                 ActiveStageOutput::Terminate(_) => { terminate = true; }
                 _ => {}
+            }
+        }
+
+        if let Some(state) = pointer_update {
+            let unchanged = last_pointer.as_ref().is_some_and(|prev| prev.same_as(&state));
+            if !unchanged {
+                let event = cursor_event(&session_id, &state);
+                log::debug!(
+                    "[rdp {}] cursor {} {}x{} hotspot {},{}",
+                    session_id, event.kind, event.width, event.height,
+                    event.hotspot_x, event.hotspot_y,
+                );
+                let _ = app.emit("rdp-cursor", event);
+                last_pointer = Some(state);
             }
         }
 
@@ -448,6 +527,30 @@ fn handle_input(
     };
 
     stage.process_fastpath_input(image, &events)
+}
+
+fn cursor_event(session_id: &str, state: &PointerState) -> RdpCursorEvent {
+    let (kind, width, height, hotspot_x, hotspot_y, data) = match state {
+        PointerState::Default => ("default", 0, 0, 0, 0, String::new()),
+        PointerState::Hidden => ("hidden", 0, 0, 0, 0, String::new()),
+        PointerState::Bitmap(p) => (
+            "bitmap",
+            p.width,
+            p.height,
+            p.hotspot_x,
+            p.hotspot_y,
+            BASE64.encode(&p.bitmap_data),
+        ),
+    };
+    RdpCursorEvent {
+        session_id: session_id.to_string(),
+        kind,
+        width,
+        height,
+        hotspot_x,
+        hotspot_y,
+        data,
+    }
 }
 
 fn emit_status(app: &AppHandle, session_id: &str, status: &str, message: Option<String>) {

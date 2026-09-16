@@ -11,6 +11,8 @@ import {
   reconcileModifiers,
   releaseHeldKeys,
 } from "../utils/rdpKeyboard";
+import { CursorPlan, RdpCursorEvent, cursorCss, cursorPlan } from "../utils/rdpCursor";
+import { base64ToRgba } from "../utils/rgba";
 
 // RDP PointerFlags (from MS-RDPBCGR §2.2.8.1.2.2)
 const PTR_MOVE        = 0x0800;
@@ -115,6 +117,56 @@ interface UseRdpCanvasOptions {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
 }
 
+/**
+ * Remote pixels per CSS pixel, measured from the live layout the way
+ * `canvasCoords` does — `devicePixelRatio` only matches while the CSS size
+ * computed from it is still current, and `flushFrames` pins that size once.
+ */
+function canvasScale(canvas: HTMLCanvasElement): number {
+  const rect = canvas.getBoundingClientRect();
+  if (canvas.width <= 0 || rect.width <= 0) return window.devicePixelRatio || 1;
+  return canvas.width / rect.width;
+}
+
+/**
+ * Turn a remote pointer bitmap into a PNG data URL at the size the plan asks
+ * for. The bitmap arrives as non-premultiplied RGBA, which is exactly what
+ * `putImageData` expects.
+ */
+function encodeCursor(evt: RdpCursorEvent, plan: CursorPlan): string | null {
+  if (plan.type !== "bitmap") return null;
+  try {
+    const decoded = base64ToRgba(evt.data);
+    // `ImageData` demands exactly 4 bytes per pixel and throws otherwise, so a
+    // longer buffer has to be trimmed rather than passed through.
+    const expected = plan.sourceWidth * plan.sourceHeight * 4;
+    if (decoded.length < expected) return null;
+    const bytes = decoded.length === expected ? decoded : decoded.subarray(0, expected);
+
+    const source = document.createElement("canvas");
+    source.width = plan.sourceWidth;
+    source.height = plan.sourceHeight;
+    const sourceCtx = source.getContext("2d");
+    if (!sourceCtx) return null;
+    sourceCtx.putImageData(new ImageData(bytes, plan.sourceWidth, plan.sourceHeight), 0, 0);
+
+    if (plan.cssWidth === plan.sourceWidth && plan.cssHeight === plan.sourceHeight) {
+      return source.toDataURL("image/png");
+    }
+    // On a HiDPI display the bitmap is in device pixels and a CSS cursor is
+    // sized in CSS pixels, so it has to be scaled down to match the content.
+    const scaled = document.createElement("canvas");
+    scaled.width = plan.cssWidth;
+    scaled.height = plan.cssHeight;
+    const scaledCtx = scaled.getContext("2d");
+    if (!scaledCtx) return null;
+    scaledCtx.drawImage(source, 0, 0, plan.cssWidth, plan.cssHeight);
+    return scaled.toDataURL("image/png");
+  } catch {
+    return null;
+  }
+}
+
 type PendingFrame = {
   x: number; y: number;
   width: number; height: number;
@@ -142,6 +194,7 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
   useEffect(() => {
     let unlistenStatus: UnlistenFn | null = null;
     let unlistenFrame: UnlistenFn | null = null;
+    let unlistenCursor: UnlistenFn | null = null;
     let unlistenClipboardText: UnlistenFn | null = null;
 
     const init = async () => {
@@ -181,10 +234,7 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
             canvas.style.height = Math.round(fullHeight / dpr) + "px";
           }
 
-          const binary = atob(data);
-          const bytes = new Uint8ClampedArray(binary.length);
-          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-          ctx.putImageData(new ImageData(bytes, width, height), x, y);
+          ctx.putImageData(new ImageData(base64ToRgba(data), width, height), x, y);
         }
         // One flush per batch — keeps WebKitGTK compositing the full canvas correctly
         ctx.getImageData(0, 0, 1, 1);
@@ -199,6 +249,17 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
           if (rafIdRef.current === null) {
             rafIdRef.current = requestAnimationFrame(flushFrames);
           }
+        }
+      );
+
+      unlistenCursor = await listen<{ sessionId: string } & RdpCursorEvent>(
+        "rdp-cursor",
+        (event) => {
+          if (event.payload.sessionId !== sessionId) return;
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const plan = cursorPlan(event.payload, canvasScale(canvas));
+          canvas.style.cursor = cursorCss(plan, encodeCursor(event.payload, plan));
         }
       );
 
@@ -235,8 +296,12 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
     return () => {
       if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current);
       pendingFramesRef.current = [];
+      // Inline styles beat the stylesheet, so a `PointerHidden` left behind
+      // would keep the canvas cursorless across a reconnect.
+      canvasRef.current?.style.removeProperty("cursor");
       unlistenStatus?.();
       unlistenFrame?.();
+      unlistenCursor?.();
       unlistenClipboardText?.();
       rdp.disconnect(sessionId).catch(() => {});
     };
