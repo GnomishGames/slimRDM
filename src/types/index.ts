@@ -66,6 +66,8 @@ export interface Session {
   status: SessionStatus;
   openedAt: number;
   error?: string;
+  /** Progress note for a session that has not failed, e.g. a connection retry. */
+  note?: string;
   tabId: string;
 }
 

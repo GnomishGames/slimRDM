@@ -53,6 +53,7 @@ interface AppState {
   openSession: (connection: Connection) => string;
   closeTab: (primarySessionId: string) => void;
   setSessionStatus: (sessionId: string, status: SessionStatus, error?: string) => void;
+  setSessionNote: (sessionId: string, note?: string) => void;
   setActiveSession: (sessionId: string | null) => void;
 
   splitPane: (sessionId: string, direction: "vertical" | "horizontal") => void;
@@ -250,6 +251,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({
       sessions: s.sessions.map((sess) =>
         sess.id === sessionId ? { ...sess, status, error } : sess
+      ),
+    }));
+  },
+
+  setSessionNote: (sessionId, note) => {
+    set((s) => ({
+      sessions: s.sessions.map((sess) =>
+        sess.id === sessionId ? { ...sess, note } : sess
       ),
     }));
   },

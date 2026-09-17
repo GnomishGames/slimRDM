@@ -20,6 +20,10 @@ use std::io;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt as _};
 use x509_cert::der::Decode as _;
 
+fn cert_from_der(der: &[u8]) -> io::Result<x509_cert::Certificate> {
+    x509_cert::Certificate::from_der(der).map_err(io::Error::other)
+}
+
 #[cfg(target_os = "linux")]
 pub type LegacyTlsStream<S> = tokio_openssl::SslStream<S>;
 #[cfg(not(target_os = "linux"))]
@@ -50,12 +54,16 @@ where
     // only certificate is SHA-1 signed then has nothing it can present.
     builder.set_security_level(0);
     // The level alone does not widen the suite list: the system openssl.cnf has
-    // already narrowed it at context creation. `ALL` excludes eNULL but not
-    // aNULL, and level 0 lifts the usual prohibition on it — an anonymous suite
-    // would leave no certificate for CredSSP to bind the session to, which is
-    // the only server authentication this path has.
+    // already narrowed it at context creation. What is excluded matters as much
+    // as what is offered, because resetting the strict handshake is enough to
+    // force a session onto this path: `ALL` keeps aNULL (no certificate at all,
+    // so nothing for CredSSP to bind to) and level 0 readmits the broken
+    // families, leaving the weakest suite the server accepts up to whoever
+    // provoked the retry. Excluding them still leaves every CBC suite these
+    // hosts actually need — ECDHE-RSA-AES256-SHA384 and ECDHE-RSA-AES128-SHA
+    // among them.
     builder
-        .set_cipher_list("ALL:!aNULL:!eNULL")
+        .set_cipher_list("ALL:!aNULL:!eNULL:!3DES:!DES:!RC4:!MD5:!EXPORT:!SEED:!IDEA")
         .map_err(io::Error::other)?;
     builder
         .set_min_proto_version(Some(SslVersion::TLS1))
@@ -67,11 +75,15 @@ where
     // source: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cssp/385a7489-d46b-464c-b224-f7340e308a5c
     builder.set_session_cache_mode(SslSessionCacheMode::OFF);
 
+    // rustls sends SNI for a DNS name and omits it for an IP literal. Mirroring
+    // that matters because the retry has to reach the same certificate the
+    // first attempt saw: a host that selects by SNI would otherwise hand the
+    // fallback a different key, and CredSSP binds to the key.
     let ssl = builder
         .build()
         .configure()
         .map_err(io::Error::other)?
-        .use_server_name_indication(false)
+        .use_server_name_indication(server_name.parse::<std::net::IpAddr>().is_err())
         .verify_hostname(false)
         .into_ssl(server_name)
         .map_err(io::Error::other)?;
@@ -90,9 +102,7 @@ where
         .to_der()
         .map_err(io::Error::other)?;
 
-    let cert = x509_cert::Certificate::from_der(&cert).map_err(io::Error::other)?;
-
-    Ok((tls_stream, cert))
+    Ok((tls_stream, cert_from_der(&cert)?))
 }
 
 /// Wrap `stream` in TLS, accepting the ciphers and SHA-1 signatures modern
@@ -105,11 +115,16 @@ where
 {
     use tokio_native_tls::native_tls::{Protocol, TlsConnector};
 
+    // native-tls exposes no way to disable TLS session resumption, which
+    // CredSSP does not support (MS-CSSP). Schannel caches client sessions per
+    // process, so a second connection to the same host in one run can resume
+    // and fail authentication where the first succeeded. Unsolved here; the
+    // Linux arm turns the cache off explicitly.
     let connector = TlsConnector::builder()
         .danger_accept_invalid_certs(true)
         .danger_accept_invalid_hostnames(true)
         .min_protocol_version(Some(Protocol::Tlsv10))
-        .use_sni(false)
+        .use_sni(server_name.parse::<std::net::IpAddr>().is_err())
         .build()
         .map_err(io::Error::other)?;
 
@@ -127,9 +142,7 @@ where
         .to_der()
         .map_err(io::Error::other)?;
 
-    let cert = x509_cert::Certificate::from_der(&cert).map_err(io::Error::other)?;
-
-    Ok((tls_stream, cert))
+    Ok((tls_stream, cert_from_der(&cert)?))
 }
 
 #[cfg(all(test, target_os = "linux"))]
@@ -167,10 +180,12 @@ mod tests {
         // security level, so the stand-in has to drop to 0 the same way.
         acceptor.set_security_level(0);
         acceptor.set_cipher_list("ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA:@SECLEVEL=0").unwrap();
-        // Schannel will not present a certificate whose signature algorithm the
-        // client left out of its signature_algorithms extension. Signing with
-        // SHA-1 only reproduces that: a client that does not advertise
-        // rsa_pkcs1_sha1 gets no shared signature algorithm and is dropped.
+        // Signing with SHA-1 only is what exercises `set_security_level(0)` in
+        // the client above: OpenSSL strips rsa_pkcs1_sha1 from its advertised
+        // signature algorithms at level 1 and up, and this server then has no
+        // algorithm it can sign with. It is not what defeats rustls — ironrdp-tls
+        // builds its verifier with RSA_PKCS1_SHA1 in `supported_verify_schemes`,
+        // so rustls does advertise it; rustls fails on the cipher list alone.
         acceptor.set_sigalgs_list("RSA+SHA1").unwrap();
         acceptor.set_max_proto_version(Some(SslVersion::TLS1_2)).unwrap();
         acceptor.set_private_key(&key).unwrap();
@@ -210,9 +225,18 @@ mod tests {
 
         // This is the failure reported as "TLS upgrade failed": rustls offers
         // AEAD suites only, so there is nothing to negotiate.
-        let result = ironrdp_tls::upgrade(stream, "LEGACY.example.test").await;
+        let error = ironrdp_tls::upgrade(stream, "LEGACY.example.test")
+            .await
+            .expect_err("rustls should find no shared cipher suite");
 
-        assert!(result.is_err(), "rustls should find no shared cipher suite");
+        // The fallback only runs for errors this predicate accepts, and the
+        // mapping from a refused handshake to an io::ErrorKind is tokio-rustls
+        // implementation detail rather than published contract — so pin it.
+        assert!(
+            crate::commands::rdp::is_handshake_refusal(&error),
+            "a refused handshake must be classified as retryable, got {:?}",
+            error.kind(),
+        );
         server.abort();
     }
 }

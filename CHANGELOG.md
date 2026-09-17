@@ -11,6 +11,7 @@
 ### Internal
 - The RDP session is generic over the upgraded stream, so both TLS stacks share one code path from CredSSP authentication onward, and a session failure now distinguishes a refused handshake — the one failure worth retrying — from every other way a session ends. The retry reconnects from scratch because the failed handshake takes the TCP stream and the X.224 negotiation with it.
 - Tests cover the fallback against a stand-in server configured the way those hosts are: CBC suites only, TLS 1.2 ceiling, and a SHA-1 signed certificate it will only sign with, which is what makes a client that omits `rsa_pkcs1_sha1` get dropped.
+- The fallback excludes the broken cipher families (3DES, DES, RC4, MD5, export, SEED, IDEA) and anonymous suites even at security level 0, and mirrors the strict path's SNI behaviour. Resetting a handshake is enough to force a connection onto this path, so what it declines matters as much as what it offers; an anonymous suite would leave no certificate for CredSSP to bind to.
 - Only a handshake the server refuses is retried — a reset, an abrupt close or a rejection alert — so a timeout or a broken route does not silently open a second connection, and a pane closed during the handshake is not reconnected. When the retry fails too, both errors are reported rather than just the second.
 
 ## [1.7.10] - 2026-09-16

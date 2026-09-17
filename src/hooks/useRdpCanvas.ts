@@ -176,6 +176,7 @@ type PendingFrame = {
 
 export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasOptions) {
   const setSessionStatus = useAppStore((s) => s.setSessionStatus);
+  const setSessionNote = useAppStore((s) => s.setSessionNote);
   const closePane = useAppStore((s) => s.closePane);
   const rdpDefaults = useSettingsStore((s) => s.rdpDefaults);
   const connectedRef = useRef(false);
@@ -205,8 +206,13 @@ export function useRdpCanvas({ sessionId, connection, canvasRef }: UseRdpCanvasO
           const { status, message } = event.payload;
           if (status === "disconnected") {
             closePane(sessionId);
-          } else {
+          } else if (status === "error") {
             setSessionStatus(sessionId, status as SessionStatus, message);
+          } else {
+            // A message on a non-error status is progress, not a failure —
+            // keeping it out of `error` so nothing reads a live session as one.
+            setSessionStatus(sessionId, status as SessionStatus);
+            setSessionNote(sessionId, message);
             if (status === "connected") connectedRef.current = true;
           }
         }
