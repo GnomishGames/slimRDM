@@ -11,7 +11,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 
 use ironrdp::connector::{ClientConnector, Config, Credentials, DesktopSize, ServerName};
-use ironrdp::session::{ActiveStage, ActiveStageOutput};
+use ironrdp::session::{ActiveStage, ActiveStageBuilder, ActiveStageOutput};
 use ironrdp::session::image::DecodedImage;
 use ironrdp::graphics::image_processing::PixelFormat;
 use ironrdp::graphics::pointer::DecodedPointer;
@@ -323,6 +323,11 @@ where
         hardware_id: None,
         license_cache: None,
         timezone_info: TimezoneInfo::default(),
+        alternate_shell: String::new(),
+        work_dir: String::new(),
+        // Bulk compression stays off, as it was before the 0.17 upgrade.
+        compression_type: None,
+        multitransport_flags: None,
     };
 
     let mut framed = TokioFramed::new(stream);
@@ -451,7 +456,17 @@ where
         connection_result.desktop_size.width,
         connection_result.desktop_size.height,
     );
-    let mut active_stage = ActiveStage::new(connection_result);
+    let mut active_stage = ActiveStageBuilder {
+        static_channels: connection_result.static_channels,
+        user_channel_id: connection_result.user_channel_id,
+        io_channel_id: connection_result.io_channel_id,
+        message_channel_id: connection_result.message_channel_id,
+        share_id: connection_result.share_id,
+        compression_type: connection_result.compression_type,
+        enable_server_pointer: connection_result.enable_server_pointer,
+        pointer_software_rendering: connection_result.pointer_software_rendering,
+    }
+    .build();
     let frame_budget = match params.connection_quality.as_deref() {
         Some("lan")       => Duration::from_millis(8),   // ~120fps
         Some("broadband") => Duration::from_millis(33),  // ~30fps
