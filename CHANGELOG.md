@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Security
+- **cryptoki updated past an out-of-bounds read** — cryptoki 0.10.0 could read out of bounds when decoding `CKA_ALLOWED_MECHANISMS` ([RUSTSEC-2026-0286](https://rustsec.org/advisories/RUSTSEC-2026-0286), published 16 September 2026). It reaches this app through ironrdp-connector's use of sspi, and `cargo audit` is a required check, so it has been updated to 0.10.1.
+
 ### Fixed
 - **RDP to Windows servers with legacy TLS settings connects again** — connecting to such a host failed with `TLS upgrade failed: Connection reset by peer (os error 104)` right after the server had agreed to NLA. Those servers offer no AEAD cipher suite at all and present an RDP certificate signed with SHA-1 — while rustls — the TLS implementation behind RDP here — implements AEAD suites exclusively and will not adopt the CBC suites they need, so the two had nothing in common and the server dropped the socket mid-handshake rather than sending an alert. When the strict handshake is refused, the connection is now retried once over a TLS stack that still speaks those suites: OpenSSL on Linux, verified against such a server, and the platform stack on Windows and macOS, which negotiates these suites by default the way mstsc does but is not covered by the tests. Nothing changes for servers that negotiate normally, and the retry is reported in the connecting overlay and the log rather than happening silently.
 
