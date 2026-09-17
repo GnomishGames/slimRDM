@@ -5,6 +5,7 @@
 //! efficiently encode text, UI elements, and icons.
 
 mod glyph_cache;
+mod nscodec;
 mod vbar_cache;
 
 pub use self::glyph_cache::{GLYPH_CACHE_SIZE, GlyphCache, GlyphEntry};
@@ -335,7 +336,19 @@ impl ClearCodecDecoder {
                 }
             }
             SubcodecId::NsCodec => {
-                // Not yet implemented; encoder avoids generating NSCodec tiles.
+                // PATCH (slimRDM): this used to fall through silently, which
+                // reported success while leaving the region's pixels zeroed —
+                // solid black painted over whatever was there. Windows uses
+                // NSCodec for photographic and icon content.
+                nscodec::decode(
+                    sub.bitmap_data,
+                    usize::from(sub.x_start),
+                    usize::from(sub.y_start),
+                    usize::from(sub.width),
+                    usize::from(sub.height),
+                    sw,
+                    output,
+                )?;
             }
         }
 
