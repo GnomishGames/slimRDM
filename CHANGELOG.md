@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- **RDP to Windows servers with legacy TLS settings connects again** — connecting to such a host failed with `TLS upgrade failed: Connection reset by peer (os error 104)` right after the server had agreed to NLA. Those servers offer no AEAD cipher suite at all and present an RDP certificate signed with SHA-1 — while rustls — the TLS implementation behind RDP here — implements AEAD suites exclusively and will not adopt the CBC suites they need, so the two had nothing in common and the server dropped the socket mid-handshake rather than sending an alert. When the strict handshake is refused, the connection is now retried once over a TLS stack that still speaks those suites: OpenSSL on Linux, verified against such a server, and the platform stack on Windows and macOS, which negotiates these suites by default the way mstsc does but is not covered by the tests. Nothing changes for servers that negotiate normally, and the retry is reported in the connecting overlay and the log rather than happening silently.
+
+### Internal
+- The RDP session is generic over the upgraded stream, so both TLS stacks share one code path from CredSSP authentication onward, and a session failure now distinguishes a refused handshake — the one failure worth retrying — from every other way a session ends. The retry reconnects from scratch because the failed handshake takes the TCP stream and the X.224 negotiation with it.
+- Tests cover the fallback against a stand-in server configured the way those hosts are: CBC suites only, TLS 1.2 ceiling, and a SHA-1 signed certificate it will only sign with, which is what makes a client that omits `rsa_pkcs1_sha1` get dropped.
+- Only a handshake the server refuses is retried — a reset, an abrupt close or a rejection alert — so a timeout or a broken route does not silently open a second connection, and a pane closed during the handshake is not reconnected. When the retry fails too, both errors are reported rather than just the second.
+
 ## [1.7.10] - 2026-09-16
 
 ### Security

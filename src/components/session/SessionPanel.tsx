@@ -113,7 +113,11 @@ function RdpPanel({ session }: { session: Session }) {
       {session.status === "connecting" && (
         <div className="rdp-overlay rdp-panel--loading">
           <div className="rdp-status-dot rdp-status-dot--connecting" />
-          <span>Connecting to {session.connection.host}…</span>
+          <span>
+            Connecting to {session.connection.host}…
+            {/* Progress notes arrive on the status event, e.g. the legacy-TLS retry. */}
+            {session.error && <span className="rdp-panel-note"> {session.error}</span>}
+          </span>
         </div>
       )}
       {session.status === "error" && (

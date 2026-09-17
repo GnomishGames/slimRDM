@@ -55,12 +55,23 @@ ironrdp = { version = "0.14", features = ["connector", "session", "graphics", "p
 ironrdp-cliprdr = "0.5"
 ironrdp-tokio = { version = "0.8", features = ["reqwest"] }
 ironrdp-tls = { version = "0.2", features = ["rustls"] }
+# Shared with ironrdp-tls, so the legacy-TLS fallback can hand it a certificate.
+x509-cert = { version = "0.2", default-features = false, features = ["std"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 smallvec = "1"
 arboard = "3"
 
 # Local terminal (TRM)
 portable-pty = "0.8"
+
+# Legacy-TLS fallback for pre-2012 RDP servers (see commands/legacy_tls.rs).
+# OpenSSL is already linked on Linux through reqwest's native-tls backend.
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = "0.10"
+tokio-openssl = "0.6"
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+tokio-native-tls = "0.3"
 
 [features]
 default = ["ssh"]

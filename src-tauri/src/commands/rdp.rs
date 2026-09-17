@@ -25,6 +25,7 @@ use ironrdp_cliprdr::{Cliprdr, Client};
 use ironrdp_cliprdr::pdu::{ClipboardFormat, ClipboardFormatId, FormatDataResponse};
 use ironrdp_cliprdr::backend::CliprdrBackendFactory;
 
+use crate::commands::legacy_tls;
 use crate::commands::tunnel_utils::{JumpHostParams, open_jump_channel};
 use crate::commands::clipboard::{
     TauriCliprdrBackendFactory, get_clipboard_data,
@@ -154,36 +155,112 @@ pub async fn rdp_connect(app: AppHandle, params: RdpConnectParams) -> Result<(),
     Ok(())
 }
 
+/// Which TLS stack a connection attempt upgrades the security layer with.
+#[derive(Clone, Copy)]
+enum TlsMode {
+    /// rustls, as `ironrdp-tls` configures it: AEAD cipher suites only.
+    Strict,
+    /// The permissive stack in `legacy_tls`, for pre-2012 Schannel servers.
+    Legacy,
+}
+
+/// Tagged so `run_rdp_session` can tell a refused TLS handshake — worth one
+/// retry with the legacy stack — from every other way a session can end.
+enum SessionFailure {
+    TlsHandshake(String),
+    Other(String),
+}
+
+impl SessionFailure {
+    fn message(self) -> String {
+        match self {
+            Self::TlsHandshake(message) | Self::Other(message) => message,
+        }
+    }
+}
+
+impl From<String> for SessionFailure {
+    fn from(message: String) -> Self {
+        Self::Other(message)
+    }
+}
+
+impl From<&str> for SessionFailure {
+    fn from(message: &str) -> Self {
+        Self::Other(message.to_owned())
+    }
+}
+
 async fn run_rdp_session(
     app: &AppHandle,
     params: RdpConnectParams,
-    input_rx: mpsc::UnboundedReceiver<SessionInput>,
+    mut input_rx: mpsc::UnboundedReceiver<SessionInput>,
 ) -> Result<(), String> {
     let session_id = params.session_id.clone();
     emit_status(app, &session_id, "connecting", None);
 
+    match connect_attempt(app, &params, &mut input_rx, TlsMode::Strict).await {
+        Err(SessionFailure::TlsHandshake(message)) => {
+            // A Schannel host with no AEAD cipher suite and a SHA-1 signed RDP
+            // certificate leaves rustls nothing to negotiate, and the server
+            // resets the socket. The failed handshake took the stream with it,
+            // so the retry reconnects and redoes the X.224 negotiation.
+            log::warn!("[rdp {session_id}] {message} — retrying with legacy TLS");
+
+            // A disconnect requested during the handshake is still sitting in
+            // the input queue — nothing reads it until the session loop — so
+            // ask the registry instead of building a second connection to a
+            // pane the user has already closed.
+            let still_open = RDP_SESSIONS.lock().unwrap().contains_key(&session_id);
+            if !still_open {
+                return Ok(());
+            }
+
+            emit_status(
+                app,
+                &session_id,
+                "connecting",
+                Some("server refused modern TLS — retrying with legacy TLS".to_owned()),
+            );
+            connect_attempt(app, &params, &mut input_rx, TlsMode::Legacy)
+                .await
+                .map_err(|failure| {
+                    format!("{message} — legacy TLS retry also failed: {}", failure.message())
+                })
+        }
+        result => result.map_err(SessionFailure::message),
+    }
+}
+
+async fn connect_attempt(
+    app: &AppHandle,
+    params: &RdpConnectParams,
+    input_rx: &mut mpsc::UnboundedReceiver<SessionInput>,
+    tls: TlsMode,
+) -> Result<(), SessionFailure> {
     if let Some(ref jump) = params.jump_host_params {
         let stream = open_jump_channel(jump, &params.host, params.port)
             .await
             .map_err(|e| format!("Jump host error: {e}"))?;
         let client_addr: std::net::SocketAddr = "127.0.0.1:0".parse().unwrap();
-        run_rdp_inner(app, params, input_rx, stream, client_addr).await
+        run_rdp_inner(app, params, input_rx, stream, client_addr, tls).await
     } else {
         let tcp = TcpStream::connect(format!("{}:{}", params.host, params.port))
             .await
             .map_err(|e| format!("TCP connect failed: {e}"))?;
         let client_addr = tcp.local_addr().map_err(|e| e.to_string())?;
-        run_rdp_inner(app, params, input_rx, tcp, client_addr).await
+        run_rdp_inner(app, params, input_rx, tcp, client_addr, tls).await
     }
 }
 
 async fn run_rdp_inner<S>(
     app: &AppHandle,
-    params: RdpConnectParams,
-    mut input_rx: mpsc::UnboundedReceiver<SessionInput>,
+    params: &RdpConnectParams,
+    input_rx: &mut mpsc::UnboundedReceiver<SessionInput>,
     stream: S,
     client_addr: std::net::SocketAddr,
-) -> Result<(), String>
+    tls: TlsMode,
+) -> Result<(), SessionFailure>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
 {
@@ -254,15 +331,77 @@ where
         .map_err(|e| format!("Negotiation failed: {e}"))?;
 
     let raw_stream = framed.into_inner_no_leftover();
-    let (tls_stream, tls_cert) = ironrdp_tls::upgrade(raw_stream, &params.host)
-        .await
-        .map_err(|e| format!("TLS upgrade failed: {e}"))?;
 
-    let server_public_key = ironrdp_tls::extract_tls_server_public_key(&tls_cert)
-        .ok_or("Failed to extract server public key")?
-        .to_owned();
+    // The arms differ only in the TLS stack underneath the session.
+    match tls {
+        TlsMode::Strict => {
+            let (tls_stream, tls_cert) = ironrdp_tls::upgrade(raw_stream, &params.host)
+                .await
+                .map_err(|e| {
+                    let message = format!("TLS upgrade failed: {e}");
+                    if is_handshake_refusal(&e) {
+                        SessionFailure::TlsHandshake(message)
+                    } else {
+                        SessionFailure::Other(message)
+                    }
+                })?;
+            let public_key = extract_server_public_key(&tls_cert)?;
+            let upgraded = rdp_tokio::mark_as_upgraded(should_upgrade, &mut connector);
+            run_session(app, params, input_rx, connector, upgraded, tls_stream, public_key).await
+        }
+        TlsMode::Legacy => {
+            let (tls_stream, tls_cert) = legacy_tls::upgrade(raw_stream, &params.host)
+                .await
+                .map_err(|e| SessionFailure::TlsHandshake(format!("Legacy TLS upgrade failed: {e}")))?;
+            log::warn!(
+                "[rdp {session_id}] upgraded with legacy TLS — {} refuses modern cipher suites",
+                params.host,
+            );
+            let public_key = extract_server_public_key(&tls_cert)?;
+            let upgraded = rdp_tokio::mark_as_upgraded(should_upgrade, &mut connector);
+            run_session(app, params, input_rx, connector, upgraded, tls_stream, public_key).await
+        }
+    }
+}
 
-    let upgraded = rdp_tokio::mark_as_upgraded(should_upgrade, &mut connector);
+/// Whether a failed handshake looks like the server refusing what was offered,
+/// rather than the connection breaking underneath it. A server with no cipher
+/// suite in common drops the socket — `spftp` sends a reset, others close
+/// without a word — or sends an alert that rustls surfaces as invalid data. A
+/// timeout or an unreachable route is not worth a second full connection.
+fn is_handshake_refusal(error: &std::io::Error) -> bool {
+    use std::io::ErrorKind;
+
+    matches!(
+        error.kind(),
+        ErrorKind::ConnectionReset
+            | ErrorKind::ConnectionAborted
+            | ErrorKind::UnexpectedEof
+            | ErrorKind::InvalidData
+    )
+}
+
+fn extract_server_public_key(cert: &x509_cert::Certificate) -> Result<Vec<u8>, SessionFailure> {
+    ironrdp_tls::extract_tls_server_public_key(cert)
+        .map(<[u8]>::to_vec)
+        .ok_or_else(|| SessionFailure::Other("Failed to extract server public key".to_owned()))
+}
+
+/// Finish CredSSP authentication over the upgraded stream and run the session
+/// until it disconnects. Generic over the stream so both TLS stacks share it.
+async fn run_session<U>(
+    app: &AppHandle,
+    params: &RdpConnectParams,
+    input_rx: &mut mpsc::UnboundedReceiver<SessionInput>,
+    connector: ClientConnector,
+    upgraded: rdp_tokio::Upgraded,
+    tls_stream: U,
+    server_public_key: Vec<u8>,
+) -> Result<(), SessionFailure>
+where
+    U: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    let session_id = params.session_id.clone();
     let mut upgraded_framed = TokioFramed::new(tls_stream);
 
     let connection_result = rdp_tokio::connect_finalize(
@@ -277,6 +416,11 @@ where
     .await
     .map_err(|e| format!("Authentication failed: {e}"))?;
 
+    log::debug!(
+        "[rdp {session_id}] connected: desktop {}x{}",
+        connection_result.desktop_size.width,
+        connection_result.desktop_size.height,
+    );
     emit_status(app, &session_id, "connected", None);
 
     let (mut reader, mut writer) = rdp_tokio::split_tokio_framed(upgraded_framed);

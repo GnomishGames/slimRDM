@@ -904,6 +904,7 @@ html, body, #root {
   color: var(--text-muted);
 }
 .rdp-panel--error { color: var(--red); }
+.rdp-panel-note { color: var(--yellow); }
 
 /* ── Empty State ─────────────────────────────────────── */
 .empty-state {
