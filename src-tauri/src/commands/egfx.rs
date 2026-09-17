@@ -13,6 +13,7 @@
 use std::sync::{Arc, Mutex};
 
 use ironrdp::graphics::clearcodec::ClearCodecDecoder;
+use ironrdp::graphics::progressive::ProgressiveDecoder;
 use ironrdp_egfx::client::{BitmapUpdate, GraphicsPipelineHandler};
 use ironrdp_egfx::pdu::{Codec1Type, GfxPdu};
 
@@ -71,6 +72,10 @@ pub struct Handler {
     /// ClearCodec keeps glyph and v-bar caches across frames, so one decoder
     /// has to live for the whole session.
     clear: ClearCodecDecoder,
+    /// Progressive refines tiles across passes, so its context is equally
+    /// long-lived. Surface dimensions come from the reset-graphics PDU.
+    progressive: ProgressiveDecoder,
+    surface_size: (u16, u16),
     /// Codecs seen that we cannot decode, logged once each rather than per PDU.
     unsupported_logged: Vec<String>,
     decoded: u32,
@@ -91,6 +96,8 @@ impl Handler {
             updates,
             session_id,
             clear: ClearCodecDecoder::new(),
+            progressive: ProgressiveDecoder::new(),
+            surface_size: (0, 0),
             unsupported_logged: Vec::new(),
             decoded: 0,
             failed: 0,
@@ -183,6 +190,18 @@ impl GraphicsPipelineHandler for Handler {
 
     fn on_reset_graphics(&mut self, width: u32, height: u32) {
         log::debug!("[rdp {}] egfx reset graphics {width}x{height}", self.session_id);
+        self.surface_size = (
+            u16::try_from(width).unwrap_or(u16::MAX),
+            u16::try_from(height).unwrap_or(u16::MAX),
+        );
+    }
+
+    fn on_surface_created(&mut self, surface: &ironrdp_egfx::client::Surface) {
+        // Progressive needs the surface dimensions to size its tile grid, and a
+        // surface can be created without a reset-graphics PDU preceding it.
+        if self.surface_size == (0, 0) {
+            self.surface_size = (surface.width, surface.height);
+        }
     }
 
     // TEMPORARY: these all have default no-op implementations, so anything the
@@ -252,10 +271,41 @@ impl GraphicsPipelineHandler for Handler {
         });
     }
 
-    fn on_wire_to_surface2(&mut self, _pdu: &ironrdp_egfx::pdu::WireToSurface2Pdu) {
-        self.ops.progressive += 1;
-        if self.ops.progressive == 1 {
-            log::warn!("[rdp {}] egfx RFX Progressive is not decoded", self.session_id);
+    /// RFX Progressive refines a tile grid over successive passes, so each PDU
+    /// updates decoder state rather than standing alone.
+    fn on_wire_to_surface2(&mut self, pdu: &ironrdp_egfx::pdu::WireToSurface2Pdu) {
+        let (width, height) = self.surface_size;
+        if width == 0 || height == 0 {
+            return;
+        }
+
+        let tiles = match self.progressive.decode_bitmap(
+            pdu.codec_context_id,
+            width,
+            height,
+            &pdu.bitmap_data,
+        ) {
+            Ok(tiles) => tiles,
+            Err(e) => {
+                self.ops.progressive += 1;
+                if self.ops.progressive <= 3 {
+                    log::warn!("[rdp {}] progressive decode failed: {e:?}", self.session_id);
+                }
+                return;
+            }
+        };
+
+        // Tiles are a fixed 64x64 on a grid; the blit clips at the framebuffer
+        // edge, which is what trims the partial tiles along the right and
+        // bottom of a surface that is not a multiple of 64.
+        for tile in tiles {
+            self.updates.push(SurfaceOp::Bitmap {
+                x: tile.x_idx.saturating_mul(64),
+                y: tile.y_idx.saturating_mul(64),
+                width: 64,
+                height: 64,
+                rgba: tile.pixels,
+            });
         }
     }
 
