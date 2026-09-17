@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 
+use ironrdp::connector::connection_activation::ConnectionActivationState;
 use ironrdp::connector::{ClientConnector, Config, Credentials, DesktopSize, ServerName};
 use ironrdp::session::{ActiveStage, ActiveStageBuilder, ActiveStageOutput};
 use ironrdp::session::image::DecodedImage;
@@ -469,6 +470,10 @@ where
     );
     emit_status(app, &session_id, "connected", None);
 
+    // Kept for the Deactivation-Reactivation Sequence below; the MCS channel ids
+    // it carries are invariant for the life of the connection.
+    let activation_factory = connection_result.activation_factory;
+
     let (mut reader, mut writer) = rdp_tokio::split_tokio_framed(upgraded_framed);
     let mut image = DecodedImage::new(
         PixelFormat::RgbA32,
@@ -567,6 +572,7 @@ where
         }
 
         let mut terminate = false;
+        let mut reactivate = false;
         // Newest cursor state in the batch wins. Selecting a cached pointer
         // emits PointerHidden immediately followed by PointerBitmap, and
         // applying both would blink the cursor off between shapes.
@@ -611,6 +617,11 @@ where
                     });
                 }
                 ActiveStageOutput::Terminate(_) => { terminate = true; }
+                // The server tore the activation down — it does this when a
+                // client reconnects to a session that already exists. Until the
+                // capability exchange is redone it sends no graphics at all, so
+                // ignoring this leaves a live session on a frozen canvas.
+                ActiveStageOutput::DeactivateAll => { reactivate = true; }
                 _ => {}
             }
         }
@@ -727,6 +738,44 @@ where
                     data: BASE64.encode(&pixels),
                 });
             }
+        }
+
+        if reactivate {
+            log::debug!("[rdp {session_id}] server deactivated the session; reactivating");
+
+            let mut framed = rdp_tokio::unsplit_tokio_framed(reader, writer);
+            let mut sequence = activation_factory.create();
+            let mut buf = ironrdp::core::WriteBuf::new();
+            while !ironrdp::connector::Sequence::state(&sequence).is_terminal() {
+                rdp_tokio::single_sequence_step(&mut framed, &mut sequence, &mut buf)
+                    .await
+                    .map_err(|e| format!("Reactivation failed: {e}"))?;
+            }
+
+            if let ConnectionActivationState::Finalized {
+                desktop_size,
+                share_id,
+                enable_server_pointer,
+                ..
+            } = sequence.connection_activation_state()
+            {
+                // The desktop may come back a different size, so the framebuffers
+                // and the fast-path decoder have to follow it.
+                image = DecodedImage::new(PixelFormat::RgbA32, desktop_size.width, desktop_size.height);
+                egfx_fb = None;
+                pending_dirty = None;
+                active_stage.set_share_id(share_id);
+                active_stage.set_enable_server_pointer(enable_server_pointer);
+                log::debug!(
+                    "[rdp {session_id}] reactivated: desktop {}x{}",
+                    desktop_size.width,
+                    desktop_size.height,
+                );
+            }
+
+            let halves = rdp_tokio::split_tokio_framed(framed);
+            reader = halves.0;
+            writer = halves.1;
         }
 
         if terminate { return Ok(()); }
