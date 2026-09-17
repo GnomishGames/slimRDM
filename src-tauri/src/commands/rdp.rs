@@ -427,14 +427,30 @@ pub(crate) fn is_handshake_refusal(error: &std::io::Error) -> bool {
     )
 }
 
-/// Copy an RGBA rectangle into the framebuffer, clipping at its bounds.
+/// Copy an RGBA rectangle into the framebuffer, clipped to the surface.
+///
+/// Clipping has to be per row against the surface width, not against the
+/// buffer length: a rectangle that overhangs the right edge would otherwise
+/// copy straight past the end of its row and into the left edge of the next
+/// one. Graphics-pipeline tiles are always 64 wide, so every tile in the
+/// right-hand column overhangs a surface whose width is not a multiple of 64.
 fn blit(fb: &mut [u8], stride: usize, x: u16, y: u16, width: u16, height: u16, rgba: &[u8]) {
-    let row_len = width as usize * 4;
+    let surface_width = stride / 4;
+    let x = x as usize;
+    let y = y as usize;
+    if x >= surface_width {
+        return;
+    }
+
+    let visible = (width as usize).min(surface_width - x);
+    let src_row_len = width as usize * 4;
+    let copy_len = visible * 4;
+
     for row in 0..height as usize {
-        let src = row * row_len;
-        let dst = (y as usize + row) * stride + x as usize * 4;
-        if dst + row_len <= fb.len() && src + row_len <= rgba.len() {
-            fb[dst..dst + row_len].copy_from_slice(&rgba[src..src + row_len]);
+        let src = row * src_row_len;
+        let dst = (y + row) * stride + x * 4;
+        if dst + copy_len <= fb.len() && src + copy_len <= rgba.len() {
+            fb[dst..dst + copy_len].copy_from_slice(&rgba[src..src + copy_len]);
         }
     }
 }
@@ -517,6 +533,7 @@ where
     let mut egfx_fb: Option<Vec<u8>> = None;
     // Regions the server stored for repeated blitting: slot -> (w, h, RGBA).
     let mut egfx_cache: HashMap<u16, (u16, u16, Vec<u8>)> = HashMap::new();
+    let mut egfx_cache_misses: u32 = 0;
     // Union of all dirty regions not yet emitted. Carried across loop iterations
     // so updates are never dropped when the frame timer isn't ready.
     let mut pending_dirty: Option<(u16, u16, u16, u16)> = None; // (left, top, right, bottom)
@@ -549,10 +566,15 @@ where
                             touched.push((x, y, width, height));
                         }
                         egfx::SurfaceOp::Fill { rgba, rects } => {
+                            let surface_width = stride / 4;
                             for (x, y, width, height) in rects {
+                                if x as usize >= surface_width {
+                                    continue;
+                                }
+                                let visible = (width as usize).min(surface_width - x as usize);
                                 for row in 0..height as usize {
                                     let start = (y as usize + row) * stride + x as usize * 4;
-                                    let end = start + width as usize * 4;
+                                    let end = start + visible * 4;
                                     if end <= fb.len() {
                                         for px in fb[start..end].chunks_exact_mut(4) {
                                             px.copy_from_slice(&rgba);
@@ -563,36 +585,60 @@ where
                             }
                         }
                         egfx::SurfaceOp::ToCache { slot, x, y, width, height } => {
-                            let mut pixels = Vec::with_capacity(width as usize * height as usize * 4);
-                            let row_len = width as usize * 4;
+                            let surface_width = stride / 4;
+                            let visible = (width as usize)
+                                .min(surface_width.saturating_sub(x as usize));
+                            let mut pixels = Vec::with_capacity(visible * height as usize * 4);
+                            let row_len = visible * 4;
                             for row in 0..height as usize {
                                 let start = (y as usize + row) * stride + x as usize * 4;
-                                if start + row_len <= fb.len() {
+                                if row_len > 0 && start + row_len <= fb.len() {
                                     pixels.extend_from_slice(&fb[start..start + row_len]);
                                 }
                             }
-                            egfx_cache.insert(slot, (width, height, pixels));
+                            let stored_width = u16::try_from(visible).unwrap_or(width);
+                            egfx_cache.insert(slot, (stored_width, height, pixels));
                         }
                         egfx::SurfaceOp::Copy { x, y, width, height, points } => {
                             // Read the source out first: destinations may overlap it.
-                            let row_len = width as usize * 4;
+                            let surface_width = stride / 4;
+                            let visible = (width as usize)
+                                .min(surface_width.saturating_sub(x as usize));
+                            let row_len = visible * 4;
                             let mut pixels = Vec::with_capacity(row_len * height as usize);
                             for row in 0..height as usize {
                                 let start = (y as usize + row) * stride + x as usize * 4;
-                                if start + row_len <= fb.len() {
+                                if row_len > 0 && start + row_len <= fb.len() {
                                     pixels.extend_from_slice(&fb[start..start + row_len]);
                                 }
                             }
+                            let copied_width = u16::try_from(visible).unwrap_or(width);
                             for (dx, dy) in points {
-                                blit(fb, stride, dx, dy, width, height, &pixels);
-                                touched.push((dx, dy, width, height));
+                                blit(fb, stride, dx, dy, copied_width, height, &pixels);
+                                touched.push((dx, dy, copied_width, height));
                             }
                         }
                         egfx::SurfaceOp::FromCache { slot, points } => {
-                            if let Some((width, height, pixels)) = egfx_cache.get(&slot) {
-                                for (x, y) in points {
-                                    blit(fb, stride, x, y, *width, *height, pixels);
-                                    touched.push((x, y, *width, *height));
+                            match egfx_cache.get(&slot) {
+                                Some((width, height, pixels)) => {
+                                    for (x, y) in points {
+                                        blit(fb, stride, x, y, *width, *height, pixels);
+                                        touched.push((x, y, *width, *height));
+                                    }
+                                }
+                                None => {
+                                    // TEMPORARY: a blit from a slot we never
+                                    // stored leaves the framebuffer's initial
+                                    // black exactly where content belongs.
+                                    egfx_cache_misses += 1;
+                                    if egfx_cache_misses <= 10 {
+                                        log::warn!(
+                                            "[rdp {session_id}] egfx cache slot {slot} never stored; \
+                                             {} destinations left unpainted, first {:?}",
+                                            points.len(),
+                                            points.first(),
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -783,10 +829,15 @@ where
             if last_frame.elapsed() >= frame_budget {
                 last_frame = Instant::now();
                 pending_dirty = None;
-                let x = left as usize;
-                let y = top as usize;
-                let w = (right.saturating_sub(left) + 1) as usize;
-                let h = (bottom.saturating_sub(top) + 1) as usize;
+                // Clamp to the surface: a dirty rectangle can overhang, and
+                // reading a row past its end would splice in pixels from the
+                // start of the next one.
+                let x = usize::from(left).min(usize::from(image.width()).saturating_sub(1));
+                let y = usize::from(top).min(usize::from(image.height()).saturating_sub(1));
+                let w = usize::from(right.saturating_sub(left) + 1)
+                    .min(usize::from(image.width()) - x);
+                let h = usize::from(bottom.saturating_sub(top) + 1)
+                    .min(usize::from(image.height()) - y);
                 let stride = image.width() as usize * 4;
                 let src: &[u8] = match egfx_fb.as_deref() {
                     Some(fb) => fb,

@@ -85,6 +85,12 @@ pub struct Handler {
     seen_errors: Vec<String>,
     decoded_black: u32,
     black_rects: Vec<(u16, u16, u16, u16)>,
+    partly_black: u32,
+    partly_black_saved: u32,
+    surfaces_seen: Vec<u16>,
+    tile_simple: u32,
+    tile_first: u32,
+    tile_upgrade: u32,
     ops: IgnoredOps,
 }
 
@@ -111,6 +117,12 @@ impl Handler {
             seen_errors: Vec::new(),
             decoded_black: 0,
             black_rects: Vec::new(),
+            partly_black: 0,
+            partly_black_saved: 0,
+            surfaces_seen: Vec::new(),
+            tile_simple: 0,
+            tile_first: 0,
+            tile_upgrade: 0,
             ops: IgnoredOps::default(),
         }
     }
@@ -118,6 +130,15 @@ impl Handler {
 
 impl GraphicsPipelineHandler for Handler {
     fn on_bitmap_updated(&mut self, update: &BitmapUpdate) {
+        if !self.surfaces_seen.contains(&update.surface_id) {
+            self.surfaces_seen.push(update.surface_id);
+            log::warn!(
+                "[rdp {}] egfx bitmap update for surface {} (surfaces seen: {:?})",
+                self.session_id,
+                update.surface_id,
+                self.surfaces_seen,
+            );
+        }
         // Empty data means the decode was skipped — an AVC frame with no H.264
         // decoder configured. Drawing it would paint a black rectangle over
         // whatever is already there.
@@ -142,6 +163,16 @@ impl GraphicsPipelineHandler for Handler {
         let GfxPdu::WireToSurface1(pdu) = pdu else {
             return;
         };
+
+        if !self.surfaces_seen.contains(&pdu.surface_id) {
+            self.surfaces_seen.push(pdu.surface_id);
+            log::warn!(
+                "[rdp {}] egfx ClearCodec update for surface {} (surfaces seen: {:?})",
+                self.session_id,
+                pdu.surface_id,
+                self.surfaces_seen,
+            );
+        }
 
         if pdu.codec_id != Codec1Type::ClearCodec {
             let name = format!("{:?}", pdu.codec_id);
@@ -170,7 +201,39 @@ impl GraphicsPipelineHandler for Handler {
                 // repaints a good region black — a failure would leave the old
                 // pixels alone. Report the first few with the stream's glyph
                 // flags, which say whether the cache was involved.
-                if pixels.chunks_exact(4).all(|px| px[0] == 0 && px[1] == 0 && px[2] == 0) {
+                // TEMPORARY: partial blackness matters as much as total. A
+                // region that decodes 90% black in a white folder view is a
+                // decode fault the all-black check never sees.
+                let total_px = pixels.len() / 4;
+                let black_px = pixels
+                    .chunks_exact(4)
+                    .filter(|px| px[0] == 0 && px[1] == 0 && px[2] == 0)
+                    .count();
+                if total_px > 0 && black_px * 4 > total_px && black_px < total_px {
+                    self.partly_black += 1;
+                    // Big mostly-black regions are the visible defect; the
+                    // small ones are the mouse cursor, which is legitimately
+                    // dark. Capture the big ones for offline decoding.
+                    if total_px > 2000 && self.partly_black_saved < 3 {
+                        self.partly_black_saved += 1;
+                        let path = std::env::temp_dir().join(format!(
+                            "mostlyblack-{}-{width}x{height}.bin",
+                            self.partly_black_saved,
+                        ));
+                        let _ = std::fs::write(&path, &pdu.bitmap_data);
+                    }
+                    if self.partly_black <= 12 {
+                        log::warn!(
+                            "[rdp {}] clearcodec {}% black at ({},{}) {width}x{height}",
+                            self.session_id,
+                            black_px * 100 / total_px,
+                            rect.left,
+                            rect.top,
+                        );
+                    }
+                }
+
+                if black_px == total_px {
                     self.decoded_black += 1;
                     // Report each distinct rectangle once. The edge strips
                     // repaint constantly and would otherwise crowd out the
@@ -245,7 +308,25 @@ impl GraphicsPipelineHandler for Handler {
         );
     }
 
+    fn on_surface_mapped(&mut self, surface_id: u16, origin_x: u32, origin_y: u32) {
+        // TEMPORARY: everything is painted into one framebuffer at face value.
+        // If more than one surface exists, or one is mapped away from the
+        // origin, that assumption is wrong and offscreen content lands on the
+        // visible desktop.
+        log::warn!(
+            "[rdp {}] egfx surface {surface_id} mapped to output at ({origin_x},{origin_y})",
+            self.session_id,
+        );
+    }
+
     fn on_surface_created(&mut self, surface: &ironrdp_egfx::client::Surface) {
+        log::warn!(
+            "[rdp {}] egfx surface {} created {}x{}",
+            self.session_id,
+            surface.id,
+            surface.width,
+            surface.height,
+        );
         // Progressive needs the surface dimensions to size its tile grid, and a
         // surface can be created without a reset-graphics PDU preceding it.
         if self.surface_size == (0, 0) {
@@ -328,6 +409,27 @@ impl GraphicsPipelineHandler for Handler {
             return;
         }
 
+        // TEMPORARY: progressive sends a coarse first pass then refinement
+        // upgrades. A picture stuck at low resolution means the upgrades are
+        // either not being sent or not being applied; counting the kinds the
+        // server sends separates those.
+        if let Ok(blocks) = ironrdp::pdu::codecs::rfx::progressive::decode_progressive_stream(
+            &pdu.bitmap_data,
+        ) {
+            use ironrdp::pdu::codecs::rfx::progressive::{ProgressiveBlock, ProgressiveTile};
+            for block in &blocks {
+                if let ProgressiveBlock::Region(region) = block {
+                    for tile in &region.tiles {
+                        match tile {
+                            ProgressiveTile::Simple(_) => self.tile_simple += 1,
+                            ProgressiveTile::First(_) => self.tile_first += 1,
+                            ProgressiveTile::Upgrade(_) => self.tile_upgrade += 1,
+                        }
+                    }
+                }
+            }
+        }
+
         let tiles = match self.progressive.decode_bitmap(
             pdu.codec_context_id,
             width,
@@ -359,10 +461,13 @@ impl GraphicsPipelineHandler for Handler {
         }
         if self.tiles_decoded > 0 && self.tiles_decoded.is_multiple_of(200) {
             log::debug!(
-                "[rdp {}] progressive tiles {} of which all-black {}",
+                "[rdp {}] progressive tiles {} (black {}); sent simple {} first {} upgrade {}",
                 self.session_id,
                 self.tiles_decoded,
                 self.tiles_black,
+                self.tile_simple,
+                self.tile_first,
+                self.tile_upgrade,
             );
         }
 
