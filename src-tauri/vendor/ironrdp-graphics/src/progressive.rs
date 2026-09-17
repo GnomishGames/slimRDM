@@ -828,16 +828,33 @@ impl TileState {
             crate::dwt::decode(&mut cr_buf, &mut dwt_temp);
         }
 
-        // YCbCr to RGBA conversion
+        // YCbCr to RGBA conversion.
+        //
+        // PATCH (slimRDM): dequantisation shifts coefficients left by
+        // `quant - 1`, so the DWT output lives in a domain scaled by 2^5 — and
+        // nothing scaled it back before this conversion. Any tile whose
+        // quantisation actually shifted therefore came out ~32x too large and
+        // clipped every channel to 0 or 255: photographs posterised into flat
+        // blocks of saturated colour, while tiles with `quant == 1` (no shift)
+        // decoded correctly, which is why part of an image could look right.
+        //
+        // The luma offset belongs in the same scaled domain (4096 = 128 << 5),
+        // and the result is shifted down by 5 at the end, as FreeRDP does.
+        const DIVISOR: i32 = 16;
         for i in 0..64 * 64 {
-            let y = i32::from(y_buf[i]) + 128;
+            let y = (i32::from(y_buf[i]) + 4096) << DIVISOR;
             let cb = i32::from(cb_buf[i]);
             let cr = i32::from(cr_buf[i]);
 
-            // ITU-R BT.601 YCbCr to RGB conversion
-            let r = y + ((cr * 91881 + 32768) >> 16);
-            let g = y - ((cb * 22554 + cr * 46802 + 32768) >> 16);
-            let b = y + ((cb * 116130 + 32768) >> 16);
+            // ITU-R BT.601 YCbCr to RGB conversion, in 16.16 fixed point.
+            let cr_r = cr * 91916; // 1.402525
+            let cr_g = cr * 46819; // 0.714401
+            let cb_g = cb * 22525; // 0.343730
+            let cb_b = cb * 115996; // 1.769905
+
+            let r = i32::from(((cr_r + y) >> DIVISOR) as i16) >> 5;
+            let g = i32::from(((y - cb_g - cr_g) >> DIVISOR) as i16) >> 5;
+            let b = i32::from(((cb_b + y) >> DIVISOR) as i16) >> 5;
 
             let off = i * 4;
             pixels[off] = clamp_u8(r);

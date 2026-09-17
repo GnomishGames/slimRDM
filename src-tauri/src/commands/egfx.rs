@@ -88,6 +88,9 @@ pub struct Handler {
     partly_black: u32,
     partly_black_saved: u32,
     surfaces_seen: Vec<u16>,
+    clipped: u32,
+    tiles_clipped: u32,
+    tiles_grey: u32,
     tile_simple: u32,
     tile_first: u32,
     tile_upgrade: u32,
@@ -120,6 +123,9 @@ impl Handler {
             partly_black: 0,
             partly_black_saved: 0,
             surfaces_seen: Vec::new(),
+            clipped: 0,
+            tiles_clipped: 0,
+            tiles_grey: 0,
             tile_simple: 0,
             tile_first: 0,
             tile_upgrade: 0,
@@ -291,6 +297,29 @@ impl GraphicsPipelineHandler for Handler {
             px.swap(0, 2);
         }
 
+        // TEMPORARY: posterised photos mean channels are being driven to the
+        // extremes. Measure it per codec path so the culprit is unambiguous.
+        let extreme = bgra
+            .chunks_exact(4)
+            .filter(|px| px[..3].iter().any(|&c| c == 0 || c == 255))
+            .count();
+        let total = bgra.len() / 4;
+        if total > 500 && extreme * 2 > total {
+            self.clipped += 1;
+            if self.clipped <= 6 {
+                log::warn!(
+                    "[rdp {}] clearcodec path {}% extreme at ({},{}) {width}x{height}",
+                    self.session_id,
+                    extreme * 100 / total,
+                    rect.left,
+                    rect.top,
+                );
+                let path = std::env::temp_dir()
+                    .join(format!("clipped-{}-{width}x{height}.bin", self.clipped));
+                let _ = std::fs::write(&path, &pdu.bitmap_data);
+            }
+        }
+
         self.updates.push(SurfaceOp::Bitmap {
             x: rect.left,
             y: rect.top,
@@ -455,16 +484,36 @@ impl GraphicsPipelineHandler for Handler {
         // lossless-sentinel patch could plausibly cause.
         for tile in &tiles {
             self.tiles_decoded += 1;
+            let extreme = tile
+                .pixels
+                .chunks_exact(4)
+                .filter(|px| px[..3].iter().any(|&c| c == 0 || c == 255))
+                .count();
+            if extreme * 2 > tile.pixels.len() / 4 {
+                self.tiles_clipped += 1;
+            }
+            // A tile whose coefficients all decode to zero reconstructs as flat
+            // mid-grey: only the luma offset survives. That is a different
+            // failure from clipping and points at the pass that produced it.
+            if tile
+                .pixels
+                .chunks_exact(4)
+                .all(|px| px[..3].iter().all(|&c| c.abs_diff(128) <= 2))
+            {
+                self.tiles_grey += 1;
+            }
             if tile.pixels.chunks_exact(4).all(|px| px[0] == 0 && px[1] == 0 && px[2] == 0) {
                 self.tiles_black += 1;
             }
         }
         if self.tiles_decoded > 0 && self.tiles_decoded.is_multiple_of(200) {
             log::debug!(
-                "[rdp {}] progressive tiles {} (black {}); sent simple {} first {} upgrade {}",
+                "[rdp {}] progressive tiles {} (black {}, clipped {}, grey {}); sent simple {} first {} upgrade {}",
                 self.session_id,
                 self.tiles_decoded,
                 self.tiles_black,
+                self.tiles_clipped,
+                self.tiles_grey,
                 self.tile_simple,
                 self.tile_first,
                 self.tile_upgrade,
