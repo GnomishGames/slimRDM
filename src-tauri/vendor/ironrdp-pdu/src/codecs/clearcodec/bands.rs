@@ -146,11 +146,19 @@ fn decode_vbar<'a>(src: &mut ReadCursor<'a>, band_height: u16) -> DecodeResult<V
 
     // Both top bits clear: short V-bar cache miss
     // Per MS-RDPEGFX 2.2.4.1.1.2.1.1.3 (SHORT_VBAR_CACHE_MISS):
-    //   bits 13:6 = shortVBarYOn (8 bits): row where Short V-Bar begins
-    //   bits 5:0  = shortVBarYOff (6 bits): row where Short V-Bar ends
+    //   bits 7:0   = shortVBarYOn (8 bits): row where Short V-Bar begins
+    //   bits 13:8  = shortVBarYOff (6 bits): row where Short V-Bar ends
     // Pixel count = shortVBarYOff - shortVBarYOn
-    let y_on = u8::try_from(first_word >> 6).expect("top 2 bits are clear, so shifted value fits in u8");
-    let y_off = u8::try_from(first_word & 0x3F).expect("masked to 6 bits, always fits in u8");
+    //
+    // PATCH (slimRDM): these two were read the other way round — yOn from bits
+    // 13:6 and yOff from bits 5:0 — which inverts every cache-miss V-bar and
+    // fails the yOff >= yOn check on the first column of the first band, so the
+    // whole region goes unpainted. Verified against three captured payloads:
+    // with this order each band's V-bars consume the bands layer exactly
+    // (10286, 250 and 178 bytes), and the misses cover precisely the band
+    // height; with the other order all three fail on the first V-bar.
+    let y_on = u8::try_from(first_word & 0xFF).expect("masked to 8 bits, always fits in u8");
+    let y_off = u8::try_from((first_word >> 8) & 0x3F).expect("masked to 6 bits, always fits in u8");
 
     if y_off < y_on {
         return Err(invalid_field_err!("shortVBarCacheMiss", "shortVBarYOff < shortVBarYOn"));
