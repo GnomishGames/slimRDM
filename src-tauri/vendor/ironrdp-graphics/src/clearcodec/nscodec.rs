@@ -60,11 +60,11 @@ pub(crate) fn decode(
     let (green_data, rest) = rest.split_at(green_len);
     let alpha_data = &rest[..alpha_len];
 
-    let luma = rle_decode(luma_data, width * height)?;
-    let orange = rle_decode(orange_data, chroma_width * chroma_height)?;
-    let green = rle_decode(green_data, chroma_width * chroma_height)?;
+    let luma = decode_plane(luma_data, width * height)?;
+    let orange = decode_plane(orange_data, chroma_width * chroma_height)?;
+    let green = decode_plane(green_data, chroma_width * chroma_height)?;
     let alpha = if alpha_len > 0 {
-        Some(rle_decode(alpha_data, width * height)?)
+        Some(decode_plane(alpha_data, width * height)?)
     } else {
         None
     };
@@ -102,6 +102,24 @@ pub(crate) fn decode(
     }
 
     Ok(())
+}
+
+/// Expand one plane.
+///
+/// A plane is only RLE-encoded when the encoder managed to shrink it. An empty
+/// plane means "every byte is 0xFF", and a plane at or above its original size
+/// is stored literally — decoding either of those as RLE reads run lengths out
+/// of pixel data.
+fn decode_plane(data: &[u8], original_size: usize) -> DecodeResult<Vec<u8>> {
+    if data.is_empty() {
+        return Ok(vec![0xFF; original_size]);
+    }
+
+    if data.len() >= original_size {
+        return Ok(data[..original_size].to_vec());
+    }
+
+    rle_decode(data, original_size)
 }
 
 /// Expand one RLE-encoded plane ([MS-RDPNSC] 2.2.2.1).
@@ -184,6 +202,23 @@ mod tests {
         let out = rle_decode(&data, 5).unwrap();
 
         assert_eq!(out, vec![0x01, 0x02, 0x03, 0x04, 0x05]);
+    }
+
+    #[test]
+    fn an_uncompressed_plane_is_copied_not_rle_decoded() {
+        // The encoder stores a plane literally when RLE would not shrink it.
+        // Reading it as RLE misinterprets pixel values as run lengths, which is
+        // what rejected real regions with "run exceeds plane size".
+        let data = [0x10, 0x10, 0x20, 0x30];
+
+        let out = super::decode_plane(&data, 4).unwrap();
+
+        assert_eq!(out, vec![0x10, 0x10, 0x20, 0x30]);
+    }
+
+    #[test]
+    fn an_absent_plane_is_all_ones() {
+        assert_eq!(super::decode_plane(&[], 3).unwrap(), vec![0xFF, 0xFF, 0xFF]);
     }
 
     #[test]
