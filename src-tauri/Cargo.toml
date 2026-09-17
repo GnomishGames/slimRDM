@@ -84,6 +84,8 @@ russh = { path = "vendor/russh" }
 # Upstream never advertises SUPPORT_DYN_VC_GFX_PROTOCOL, so no server opens
 # the graphics pipeline channel. See commands/egfx.rs.
 ironrdp-connector = { path = "vendor/ironrdp-connector" }
+# ClearCodec RLEX mis-parses a single-entry palette; see commands/egfx.rs tests.
+ironrdp-pdu = { path = "vendor/ironrdp-pdu" }
 
 [profile.release]
 panic = "abort"

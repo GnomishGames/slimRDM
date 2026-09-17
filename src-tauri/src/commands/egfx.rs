@@ -50,6 +50,8 @@ pub struct Handler {
     clear: ClearCodecDecoder,
     /// Codecs seen that we cannot decode, logged once each rather than per PDU.
     unsupported_logged: Vec<String>,
+    decoded: u32,
+    failed: u32,
 }
 
 impl Handler {
@@ -59,6 +61,8 @@ impl Handler {
             session_id,
             clear: ClearCodecDecoder::new(),
             unsupported_logged: Vec::new(),
+            decoded: 0,
+            failed: 0,
         }
     }
 }
@@ -110,9 +114,21 @@ impl GraphicsPipelineHandler for Handler {
         }
 
         let mut bgra = match self.clear.decode(&pdu.bitmap_data, width, height) {
-            Ok(pixels) => pixels,
+            Ok(pixels) => {
+                self.decoded += 1;
+                pixels
+            }
             Err(e) => {
-                log::warn!("[rdp {}] clearcodec decode failed: {e}", self.session_id);
+                self.failed += 1;
+                // Every failure is a region left unpainted, so report the first
+                // few with their shape rather than flooding the log.
+                if self.failed <= 3 {
+                    log::warn!(
+                        "[rdp {}] clearcodec decode failed ({width}x{height}, {} bytes): {e}",
+                        self.session_id,
+                        pdu.bitmap_data.len(),
+                    );
+                }
                 return;
             }
         };
@@ -136,7 +152,12 @@ impl GraphicsPipelineHandler for Handler {
     }
 
     fn on_close(&mut self) {
-        log::debug!("[rdp {}] egfx channel closed", self.session_id);
+        log::debug!(
+            "[rdp {}] egfx channel closed; clearcodec decoded {} failed {}",
+            self.session_id,
+            self.decoded,
+            self.failed,
+        );
     }
 }
 
@@ -156,6 +177,35 @@ mod tests {
         assert_eq!((drained[0].x, drained[0].y), (1, 2));
         assert_eq!((drained[1].x, drained[1].y), (5, 6));
         assert!(sink.drain().is_empty(), "drain must empty the sink");
+    }
+
+    /// Captured from a real session against a Windows host that paints with
+    /// ClearCodec. 44x64 region: one RLEX segment whose run covers 2815 pixels,
+    /// plus the segment's own suite pixel, is exactly 2816 = 44 * 64.
+    const CLEARCODEC_44X64: &[u8] = &[
+        0x00, 0x00, // glyphFlags, seqNumber
+        0x00, 0x00, 0x00, 0x00, // residualByteCount
+        0x00, 0x00, 0x00, 0x00, // bandsByteCount
+        0x15, 0x00, 0x00, 0x00, // subcodecByteCount = 21
+        0x00, 0x00, 0x00, 0x00, // xStart, yStart
+        0x2c, 0x00, 0x40, 0x00, // width 44, height 64
+        0x08, 0x00, 0x00, 0x00, // bitmapDataByteCount = 8
+        0x02, // subcodecId = RLEX
+        0x01, // paletteCount = 1
+        0x00, 0x00, 0x00, // palette entry (BGR black)
+        0x00, // packed stopIndex/suiteDepth
+        0xff, 0xff, 0x0a, // runLengthFactor1 = 0xff -> factor2 = 2815
+    ];
+
+    #[test]
+    fn decodes_a_single_palette_clearcodec_region() {
+        let mut decoder = ClearCodecDecoder::new();
+
+        let pixels = decoder
+            .decode(CLEARCODEC_44X64, 44, 64)
+            .expect("a single-entry palette still carries a packed stop/suite byte");
+
+        assert_eq!(pixels.len(), 44 * 64 * 4);
     }
 
     #[test]
