@@ -289,7 +289,11 @@ impl GraphicsPipelineHandler for Handler {
             Err(e) => {
                 self.ops.progressive += 1;
                 if self.ops.progressive <= 3 {
-                    log::warn!("[rdp {}] progressive decode failed: {e:?}", self.session_id);
+                    log::warn!(
+                        "[rdp {}] progressive decode failed (context {}): {e:?}",
+                        self.session_id,
+                        pdu.codec_context_id,
+                    );
                 }
                 return;
             }

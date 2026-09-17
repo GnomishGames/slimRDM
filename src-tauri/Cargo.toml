@@ -86,6 +86,9 @@ russh = { path = "vendor/russh" }
 ironrdp-connector = { path = "vendor/ironrdp-connector" }
 # ClearCodec RLEX mis-parses a single-entry palette; see commands/egfx.rs tests.
 ironrdp-pdu = { path = "vendor/ironrdp-pdu" }
+# Progressive contexts: the band-layout flag is per negotiation, not per
+# context id. See commands/egfx.rs.
+ironrdp-graphics = { path = "vendor/ironrdp-graphics" }
 
 [profile.release]
 panic = "abort"
