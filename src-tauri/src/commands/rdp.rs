@@ -26,6 +26,7 @@ use ironrdp_cliprdr::{Cliprdr, Client};
 use ironrdp_cliprdr::pdu::{ClipboardFormat, ClipboardFormatId, FormatDataResponse};
 use ironrdp_cliprdr::backend::CliprdrBackendFactory;
 
+use crate::commands::egfx;
 use crate::commands::legacy_tls;
 use crate::commands::tunnel_utils::{JumpHostParams, open_jump_channel};
 use crate::commands::clipboard::{
@@ -426,6 +427,18 @@ pub(crate) fn is_handshake_refusal(error: &std::io::Error) -> bool {
     )
 }
 
+/// Copy an RGBA rectangle into the framebuffer, clipping at its bounds.
+fn blit(fb: &mut [u8], stride: usize, x: u16, y: u16, width: u16, height: u16, rgba: &[u8]) {
+    let row_len = width as usize * 4;
+    for row in 0..height as usize {
+        let src = row * row_len;
+        let dst = (y as usize + row) * stride + x as usize * 4;
+        if dst + row_len <= fb.len() && src + row_len <= rgba.len() {
+            fb[dst..dst + row_len].copy_from_slice(&rgba[src..src + row_len]);
+        }
+    }
+}
+
 fn extract_server_public_key(cert: &x509_cert::Certificate) -> Result<Vec<u8>, SessionFailure> {
     ironrdp_tls::extract_tls_server_public_key(cert)
         .map(<[u8]>::to_vec)
@@ -502,6 +515,8 @@ where
     // no mutable data. Allocated on the first update, so legacy servers pay
     // nothing for it.
     let mut egfx_fb: Option<Vec<u8>> = None;
+    // Regions the server stored for repeated blitting: slot -> (w, h, RGBA).
+    let mut egfx_cache: HashMap<u16, (u16, u16, Vec<u8>)> = HashMap::new();
     // Union of all dirty regions not yet emitted. Carried across loop iterations
     // so updates are never dropped when the frame timer isn't ready.
     let mut pending_dirty: Option<(u16, u16, u16, u16)> = None; // (left, top, right, bottom)
@@ -517,34 +532,77 @@ where
 
                 // The graphics pipeline decodes inside `process`, so anything it
                 // produced is waiting now.
-                for update in egfx_updates.drain() {
+                for op in egfx_updates.drain() {
                     let stride = image.width() as usize * 4;
                     let fb = egfx_fb.get_or_insert_with(|| {
                         vec![0u8; stride * image.height() as usize]
                     });
-                    let row_len = update.width as usize * 4;
-                    for row in 0..update.height as usize {
-                        let src = row * row_len;
-                        let dst = (update.y as usize + row) * stride + update.x as usize * 4;
-                        if dst + row_len <= fb.len() && src + row_len <= update.rgba.len() {
-                            fb[dst..dst + row_len].copy_from_slice(&update.rgba[src..src + row_len]);
+
+                    // Each operation reports the rectangles it touched, so the
+                    // dirty union and frame pacing stay shared with the legacy
+                    // path.
+                    let mut touched: Vec<(u16, u16, u16, u16)> = Vec::new();
+
+                    match op {
+                        egfx::SurfaceOp::Bitmap { x, y, width, height, rgba } => {
+                            blit(fb, stride, x, y, width, height, &rgba);
+                            touched.push((x, y, width, height));
+                        }
+                        egfx::SurfaceOp::Fill { rgba, rects } => {
+                            for (x, y, width, height) in rects {
+                                for row in 0..height as usize {
+                                    let start = (y as usize + row) * stride + x as usize * 4;
+                                    let end = start + width as usize * 4;
+                                    if end <= fb.len() {
+                                        for px in fb[start..end].chunks_exact_mut(4) {
+                                            px.copy_from_slice(&rgba);
+                                        }
+                                    }
+                                }
+                                touched.push((x, y, width, height));
+                            }
+                        }
+                        egfx::SurfaceOp::ToCache { slot, x, y, width, height } => {
+                            let mut pixels = Vec::with_capacity(width as usize * height as usize * 4);
+                            let row_len = width as usize * 4;
+                            for row in 0..height as usize {
+                                let start = (y as usize + row) * stride + x as usize * 4;
+                                if start + row_len <= fb.len() {
+                                    pixels.extend_from_slice(&fb[start..start + row_len]);
+                                }
+                            }
+                            egfx_cache.insert(slot, (width, height, pixels));
+                        }
+                        egfx::SurfaceOp::FromCache { slot, points } => {
+                            if let Some((width, height, pixels)) = egfx_cache.get(&slot) {
+                                for (x, y) in points {
+                                    blit(fb, stride, x, y, *width, *height, pixels);
+                                    touched.push((x, y, *width, *height));
+                                }
+                            }
                         }
                     }
-                    let region = (
-                        update.x,
-                        update.y,
-                        update.x.saturating_add(update.width).saturating_sub(1),
-                        update.y.saturating_add(update.height).saturating_sub(1),
-                    );
-                    pending_dirty = Some(match pending_dirty {
-                        None => region,
-                        Some((l, t, r, b)) => (
-                            l.min(region.0),
-                            t.min(region.1),
-                            r.max(region.2),
-                            b.max(region.3),
-                        ),
-                    });
+
+                    for (x, y, width, height) in touched {
+                        if width == 0 || height == 0 {
+                            continue;
+                        }
+                        let region = (
+                            x,
+                            y,
+                            x.saturating_add(width).saturating_sub(1),
+                            y.saturating_add(height).saturating_sub(1),
+                        );
+                        pending_dirty = Some(match pending_dirty {
+                            None => region,
+                            Some((l, t, r, b)) => (
+                                l.min(region.0),
+                                t.min(region.1),
+                                r.max(region.2),
+                                b.max(region.3),
+                            ),
+                        });
+                    }
                 }
 
                 (outputs, None)

@@ -16,28 +16,42 @@ use ironrdp::graphics::clearcodec::ClearCodecDecoder;
 use ironrdp_egfx::client::{BitmapUpdate, GraphicsPipelineHandler};
 use ironrdp_egfx::pdu::{Codec1Type, GfxPdu};
 
-/// One decoded rectangle, in the framebuffer's coordinate space.
-pub struct SurfaceUpdate {
-    pub x: u16,
-    pub y: u16,
-    pub width: u16,
-    pub height: u16,
-    /// RGBA, 4 bytes per pixel, row-major, `width * height * 4` long.
-    /// `ironrdp-egfx` converts the wire's BGRX to RGBA before handing it over.
-    pub rgba: Vec<u8>,
+/// A graphics operation to apply to the framebuffer, in its coordinate space.
+///
+/// The pipeline paints with more than bitmaps: large uniform areas arrive as
+/// fills, and repeated content (taskbars, window chrome) is stored once and
+/// blitted back. All of these touch the framebuffer, which the handler has no
+/// access to, so they are queued and applied by the session loop.
+pub enum SurfaceOp {
+    /// Decoded pixels for a rectangle.
+    Bitmap {
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        /// RGBA, 4 bytes per pixel, row-major, `width * height * 4` long.
+        /// `ironrdp-egfx` converts the wire's BGRX to RGBA before handing it over.
+        rgba: Vec<u8>,
+    },
+    /// Fill rectangles with one colour. Each rect is `(x, y, width, height)`.
+    Fill { rgba: [u8; 4], rects: Vec<(u16, u16, u16, u16)> },
+    /// Copy a framebuffer region into a cache slot.
+    ToCache { slot: u16, x: u16, y: u16, width: u16, height: u16 },
+    /// Blit a cached region back to each destination point.
+    FromCache { slot: u16, points: Vec<(u16, u16)> },
 }
 
 /// Shared hand-off from the channel to the session loop.
 #[derive(Clone, Default)]
-pub struct SurfaceUpdates(Arc<Mutex<Vec<SurfaceUpdate>>>);
+pub struct SurfaceUpdates(Arc<Mutex<Vec<SurfaceOp>>>);
 
 impl SurfaceUpdates {
-    pub fn push(&self, update: SurfaceUpdate) {
-        self.0.lock().unwrap().push(update);
+    pub fn push(&self, op: SurfaceOp) {
+        self.0.lock().unwrap().push(op);
     }
 
     /// Take everything received since the last call.
-    pub fn drain(&self) -> Vec<SurfaceUpdate> {
+    pub fn drain(&self) -> Vec<SurfaceOp> {
         std::mem::take(&mut *self.0.lock().unwrap())
     }
 }
@@ -52,6 +66,14 @@ pub struct Handler {
     unsupported_logged: Vec<String>,
     decoded: u32,
     failed: u32,
+    ops: IgnoredOps,
+}
+
+/// Counts of graphics operations that currently go unhandled.
+#[derive(Default)]
+struct IgnoredOps {
+    surface_to_surface: u32,
+    progressive: u32,
 }
 
 impl Handler {
@@ -63,6 +85,7 @@ impl Handler {
             unsupported_logged: Vec::new(),
             decoded: 0,
             failed: 0,
+            ops: IgnoredOps::default(),
         }
     }
 }
@@ -76,7 +99,7 @@ impl GraphicsPipelineHandler for Handler {
             return;
         }
 
-        self.updates.push(SurfaceUpdate {
+        self.updates.push(SurfaceOp::Bitmap {
             x: update.destination_rectangle.left,
             y: update.destination_rectangle.top,
             width: update.width,
@@ -140,7 +163,7 @@ impl GraphicsPipelineHandler for Handler {
             px.swap(0, 2);
         }
 
-        self.updates.push(SurfaceUpdate {
+        self.updates.push(SurfaceOp::Bitmap {
             x: rect.left,
             y: rect.top,
             width,
@@ -153,12 +176,72 @@ impl GraphicsPipelineHandler for Handler {
         log::debug!("[rdp {}] egfx reset graphics {width}x{height}", self.session_id);
     }
 
+    // TEMPORARY: these all have default no-op implementations, so anything the
+    // server paints through them disappears without trace. Count them to find
+    // out which ones this host actually uses before implementing any.
+    fn on_solid_fill(&mut self, pdu: &ironrdp_egfx::pdu::SolidFillPdu) {
+        let c = &pdu.fill_pixel;
+        let rects = pdu
+            .rectangles
+            .iter()
+            .map(|r| {
+                (
+                    r.left,
+                    r.top,
+                    r.right.saturating_sub(r.left),
+                    r.bottom.saturating_sub(r.top),
+                )
+            })
+            .collect();
+
+        // `xa` is the alpha byte; surfaces are opaque, so it is forced.
+        self.updates.push(SurfaceOp::Fill {
+            rgba: [c.r, c.g, c.b, 0xFF],
+            rects,
+        });
+    }
+
+    fn on_surface_to_surface(&mut self, _pdu: &ironrdp_egfx::pdu::SurfaceToSurfacePdu) {
+        self.ops.surface_to_surface += 1;
+        if self.ops.surface_to_surface == 1 {
+            log::warn!("[rdp {}] egfx SurfaceToSurface is not applied", self.session_id);
+        }
+    }
+
+    fn on_surface_to_cache(&mut self, pdu: &ironrdp_egfx::pdu::SurfaceToCachePdu) {
+        let r = &pdu.source_rectangle;
+        self.updates.push(SurfaceOp::ToCache {
+            slot: pdu.cache_slot,
+            x: r.left,
+            y: r.top,
+            width: r.right.saturating_sub(r.left),
+            height: r.bottom.saturating_sub(r.top),
+        });
+    }
+
+    fn on_cache_to_surface(&mut self, pdu: &ironrdp_egfx::pdu::CacheToSurfacePdu) {
+        self.updates.push(SurfaceOp::FromCache {
+            slot: pdu.cache_slot,
+            points: pdu.destination_points.iter().map(|p| (p.x, p.y)).collect(),
+        });
+    }
+
+    fn on_wire_to_surface2(&mut self, _pdu: &ironrdp_egfx::pdu::WireToSurface2Pdu) {
+        self.ops.progressive += 1;
+        if self.ops.progressive == 1 {
+            log::warn!("[rdp {}] egfx RFX Progressive is not decoded", self.session_id);
+        }
+    }
+
     fn on_close(&mut self) {
         log::debug!(
-            "[rdp {}] egfx channel closed; clearcodec decoded {} failed {}",
+            "[rdp {}] egfx closed; clearcodec decoded {} failed {}; unhandled: \
+             surface_to_surface {} progressive {}",
             self.session_id,
             self.decoded,
             self.failed,
+            self.ops.surface_to_surface,
+            self.ops.progressive,
         );
     }
 }
@@ -170,14 +253,14 @@ mod tests {
     #[test]
     fn drain_returns_updates_in_order_and_empties_the_sink() {
         let sink = SurfaceUpdates::default();
-        sink.push(SurfaceUpdate { x: 1, y: 2, width: 3, height: 4, rgba: vec![0; 48] });
-        sink.push(SurfaceUpdate { x: 5, y: 6, width: 1, height: 1, rgba: vec![9; 4] });
+        sink.push(SurfaceOp::Bitmap { x: 1, y: 2, width: 3, height: 4, rgba: vec![0; 48] });
+        sink.push(SurfaceOp::Fill { rgba: [1, 2, 3, 4], rects: vec![(5, 6, 1, 1)] });
 
         let drained = sink.drain();
 
         assert_eq!(drained.len(), 2);
-        assert_eq!((drained[0].x, drained[0].y), (1, 2));
-        assert_eq!((drained[1].x, drained[1].y), (5, 6));
+        assert!(matches!(drained[0], SurfaceOp::Bitmap { x: 1, y: 2, .. }));
+        assert!(matches!(drained[1], SurfaceOp::Fill { .. }));
         assert!(sink.drain().is_empty(), "drain must empty the sink");
     }
 
@@ -254,7 +337,7 @@ mod tests {
         // be the same queue or every update is dropped.
         let sink = SurfaceUpdates::default();
         let channel_side = sink.clone();
-        channel_side.push(SurfaceUpdate { x: 0, y: 0, width: 1, height: 1, rgba: vec![1, 2, 3, 4] });
+        channel_side.push(SurfaceOp::Bitmap { x: 0, y: 0, width: 1, height: 1, rgba: vec![1, 2, 3, 4] });
 
         assert_eq!(sink.drain().len(), 1);
     }
