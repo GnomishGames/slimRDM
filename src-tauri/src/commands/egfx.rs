@@ -1,0 +1,109 @@
+//! Graphics pipeline (MS-RDPEGFX) surface updates.
+//!
+//! Hosts running the WDDM RDP display driver paint *only* through the
+//! `Microsoft::Windows::RDS::Graphics` dynamic virtual channel. They still
+//! advertise the legacy bitmap codecs, but never produce them, so a client
+//! without this channel gets a healthy, logged-on session — clipboard and all —
+//! on a permanently blank canvas.
+//!
+//! The channel owns the handler, so updates reach the session loop through the
+//! shared sink below. They arrive while `ActiveStage::process` is running, which
+//! is why the loop drains immediately afterwards.
+
+use std::sync::{Arc, Mutex};
+
+use ironrdp_egfx::client::{BitmapUpdate, GraphicsPipelineHandler};
+
+/// One decoded rectangle, in the framebuffer's coordinate space.
+pub struct SurfaceUpdate {
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+    /// RGBA, 4 bytes per pixel, row-major, `width * height * 4` long.
+    /// `ironrdp-egfx` converts the wire's BGRX to RGBA before handing it over.
+    pub rgba: Vec<u8>,
+}
+
+/// Shared hand-off from the channel to the session loop.
+#[derive(Clone, Default)]
+pub struct SurfaceUpdates(Arc<Mutex<Vec<SurfaceUpdate>>>);
+
+impl SurfaceUpdates {
+    pub fn push(&self, update: SurfaceUpdate) {
+        self.0.lock().unwrap().push(update);
+    }
+
+    /// Take everything received since the last call.
+    pub fn drain(&self) -> Vec<SurfaceUpdate> {
+        std::mem::take(&mut *self.0.lock().unwrap())
+    }
+}
+
+pub struct Handler {
+    updates: SurfaceUpdates,
+    session_id: String,
+}
+
+impl Handler {
+    pub fn new(updates: SurfaceUpdates, session_id: String) -> Self {
+        Self { updates, session_id }
+    }
+}
+
+impl GraphicsPipelineHandler for Handler {
+    fn on_bitmap_updated(&mut self, update: &BitmapUpdate) {
+        // Empty data means the decode was skipped — an AVC frame with no H.264
+        // decoder configured. Drawing it would paint a black rectangle over
+        // whatever is already there.
+        if update.data.is_empty() {
+            return;
+        }
+
+        self.updates.push(SurfaceUpdate {
+            x: update.destination_rectangle.left,
+            y: update.destination_rectangle.top,
+            width: update.width,
+            height: update.height,
+            rgba: update.data.clone(),
+        });
+    }
+
+    fn on_reset_graphics(&mut self, width: u32, height: u32) {
+        log::debug!("[rdp {}] egfx reset graphics {width}x{height}", self.session_id);
+    }
+
+    fn on_close(&mut self) {
+        log::debug!("[rdp {}] egfx channel closed", self.session_id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drain_returns_updates_in_order_and_empties_the_sink() {
+        let sink = SurfaceUpdates::default();
+        sink.push(SurfaceUpdate { x: 1, y: 2, width: 3, height: 4, rgba: vec![0; 48] });
+        sink.push(SurfaceUpdate { x: 5, y: 6, width: 1, height: 1, rgba: vec![9; 4] });
+
+        let drained = sink.drain();
+
+        assert_eq!(drained.len(), 2);
+        assert_eq!((drained[0].x, drained[0].y), (1, 2));
+        assert_eq!((drained[1].x, drained[1].y), (5, 6));
+        assert!(sink.drain().is_empty(), "drain must empty the sink");
+    }
+
+    #[test]
+    fn a_clone_shares_one_sink() {
+        // The channel holds one clone and the session loop another; they have to
+        // be the same queue or every update is dropped.
+        let sink = SurfaceUpdates::default();
+        let channel_side = sink.clone();
+        channel_side.push(SurfaceUpdate { x: 0, y: 0, width: 1, height: 1, rgba: vec![1, 2, 3, 4] });
+
+        assert_eq!(sink.drain().len(), 1);
+    }
+}

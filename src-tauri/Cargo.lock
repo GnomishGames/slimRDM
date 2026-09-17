@@ -3167,8 +3167,6 @@ dependencies = [
 [[package]]
 name = "ironrdp-connector"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5898b3f1fcaca0f9b923b1463e158aeb64dfdec4ac361b7c086492466ff341c"
 dependencies = [
  "ironrdp-core",
  "ironrdp-error",
@@ -3214,6 +3212,21 @@ dependencies = [
  "ironrdp-core",
  "ironrdp-pdu",
  "ironrdp-svc",
+ "tracing",
+]
+
+[[package]]
+name = "ironrdp-egfx"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb345bf5e0cb6006ae51653b973cf7939fd86e97d35facf7b4ba62d4de2669b4"
+dependencies = [
+ "bit_field",
+ "bitflags 2.13.0",
+ "ironrdp-core",
+ "ironrdp-dvc",
+ "ironrdp-graphics",
+ "ironrdp-pdu",
  "tracing",
 ]
 
@@ -6362,6 +6375,8 @@ dependencies = [
  "image",
  "ironrdp",
  "ironrdp-cliprdr",
+ "ironrdp-dvc",
+ "ironrdp-egfx",
  "ironrdp-tls",
  "ironrdp-tokio",
  "keyring",

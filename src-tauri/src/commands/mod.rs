@@ -4,6 +4,7 @@ pub mod clipboard;
 pub mod connections;
 pub mod credentials;
 pub mod data;
+pub mod egfx;
 pub mod groups;
 pub mod known_hosts;
 pub mod legacy_tls;

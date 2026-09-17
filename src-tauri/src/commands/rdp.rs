@@ -335,7 +335,23 @@ where
 
     let clipboard_factory = TauriCliprdrBackendFactory::new(app.clone(), params.session_id.clone());
     let cliprdr: Cliprdr<ironrdp_cliprdr::Client> = Cliprdr::new(clipboard_factory.build_cliprdr_backend());
-    let mut connector = connector.with_static_channel(cliprdr);
+
+    // The graphics pipeline is the only way some hosts paint at all. No H.264
+    // decoder is supplied, so the AVC capability sets are filtered out and the
+    // server falls back to ClearCodec and Progressive, which decode in-crate.
+    let egfx_updates = crate::commands::egfx::SurfaceUpdates::default();
+    let graphics = ironrdp_egfx::client::GraphicsPipelineClient::new(
+        Box::new(crate::commands::egfx::Handler::new(
+            egfx_updates.clone(),
+            params.session_id.clone(),
+        )),
+        None,
+    );
+    let drdynvc = ironrdp_dvc::DrdynvcClient::new().with_dynamic_channel(graphics);
+
+    let mut connector = connector
+        .with_static_channel(cliprdr)
+        .with_static_channel(drdynvc);
 
     let should_upgrade = rdp_tokio::connect_begin(&mut framed, &mut connector)
         .await
@@ -356,7 +372,7 @@ where
                         SessionFailure::Other(message)
                     }
                 })?;
-            finish(app, params, input_rx, connector, should_upgrade, tls_stream, &tls_cert).await
+            finish(app, params, input_rx, connector, should_upgrade, tls_stream, &tls_cert, egfx_updates).await
         }
         TlsMode::Legacy => {
             let (tls_stream, tls_cert) = legacy_tls::upgrade(raw_stream, &params.host)
@@ -366,7 +382,7 @@ where
                 "[rdp {session_id}] upgraded with legacy TLS — {} refuses modern cipher suites",
                 params.host,
             );
-            finish(app, params, input_rx, connector, should_upgrade, tls_stream, &tls_cert).await
+            finish(app, params, input_rx, connector, should_upgrade, tls_stream, &tls_cert, egfx_updates).await
         }
     }
 }
@@ -382,13 +398,14 @@ async fn finish<U>(
     should_upgrade: rdp_tokio::ShouldUpgrade,
     tls_stream: U,
     tls_cert: &x509_cert::Certificate,
+    egfx_updates: crate::commands::egfx::SurfaceUpdates,
 ) -> Result<(), SessionFailure>
 where
     U: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
 {
     let public_key = extract_server_public_key(tls_cert)?;
     let upgraded = rdp_tokio::mark_as_upgraded(should_upgrade, &mut connector);
-    run_session(app, params, input_rx, connector, upgraded, tls_stream, public_key).await
+    run_session(app, params, input_rx, connector, upgraded, tls_stream, public_key, egfx_updates).await
 }
 
 /// Whether a failed handshake looks like the server refusing what was offered,
@@ -416,6 +433,7 @@ fn extract_server_public_key(cert: &x509_cert::Certificate) -> Result<Vec<u8>, S
 
 /// Finish CredSSP authentication over the upgraded stream and run the session
 /// until it disconnects. Generic over the stream so both TLS stacks share it.
+#[allow(clippy::too_many_arguments)]
 async fn run_session<U>(
     app: &AppHandle,
     params: &RdpConnectParams,
@@ -424,6 +442,7 @@ async fn run_session<U>(
     upgraded: rdp_tokio::Upgraded,
     tls_stream: U,
     server_public_key: Vec<u8>,
+    egfx_updates: crate::commands::egfx::SurfaceUpdates,
 ) -> Result<(), SessionFailure>
 where
     U: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
@@ -474,6 +493,10 @@ where
         _                 => Duration::from_millis(16),  // ~60fps (auto/default)
     };
     let mut last_frame = Instant::now();
+    // Graphics pipeline hosts paint here instead of into `image`, which exposes
+    // no mutable data. Allocated on the first update, so legacy servers pay
+    // nothing for it.
+    let mut egfx_fb: Option<Vec<u8>> = None;
     // Union of all dirty regions not yet emitted. Carried across loop iterations
     // so updates are never dropped when the frame timer isn't ready.
     let mut pending_dirty: Option<(u16, u16, u16, u16)> = None; // (left, top, right, bottom)
@@ -486,6 +509,39 @@ where
                 let (action, payload) = frame.map_err(|e| format!("Read error: {e}"))?;
                 let outputs = active_stage.process(&mut image, action, &payload)
                     .map_err(|e| format!("Session error: {e}"))?;
+
+                // The graphics pipeline decodes inside `process`, so anything it
+                // produced is waiting now.
+                for update in egfx_updates.drain() {
+                    let stride = image.width() as usize * 4;
+                    let fb = egfx_fb.get_or_insert_with(|| {
+                        vec![0u8; stride * image.height() as usize]
+                    });
+                    let row_len = update.width as usize * 4;
+                    for row in 0..update.height as usize {
+                        let src = row * row_len;
+                        let dst = (update.y as usize + row) * stride + update.x as usize * 4;
+                        if dst + row_len <= fb.len() && src + row_len <= update.rgba.len() {
+                            fb[dst..dst + row_len].copy_from_slice(&update.rgba[src..src + row_len]);
+                        }
+                    }
+                    let region = (
+                        update.x,
+                        update.y,
+                        update.x.saturating_add(update.width).saturating_sub(1),
+                        update.y.saturating_add(update.height).saturating_sub(1),
+                    );
+                    pending_dirty = Some(match pending_dirty {
+                        None => region,
+                        Some((l, t, r, b)) => (
+                            l.min(region.0),
+                            t.min(region.1),
+                            r.max(region.2),
+                            b.max(region.3),
+                        ),
+                    });
+                }
+
                 (outputs, None)
             }
             input = input_rx.recv() => {
@@ -648,7 +704,10 @@ where
                 let w = (right.saturating_sub(left) + 1) as usize;
                 let h = (bottom.saturating_sub(top) + 1) as usize;
                 let stride = image.width() as usize * 4;
-                let src = image.data();
+                let src: &[u8] = match egfx_fb.as_deref() {
+                    Some(fb) => fb,
+                    None => image.data(),
+                };
                 let mut pixels = Vec::with_capacity(w * h * 4);
                 for row in y..y + h {
                     let start = row * stride + x * 4;
