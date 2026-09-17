@@ -1174,6 +1174,54 @@ impl ProgressiveDecoder {
     }
 }
 
+
+/// The progressive quant for a tile's `quality` byte.
+///
+/// PATCH (slimRDM): `0xFF` is the full-quality sentinel — "no extra
+/// quantization", as `ProgressiveCodecQuant`'s own documentation says — not an
+/// index into the region's table. Windows sends it for lossless tiles in
+/// regions that carry no progressive quant entries at all, and indexing with it
+/// rejected the frame with `InvalidQuantIndex { index: 255, table_len: 0 }`,
+/// leaving those tiles unpainted. FreeRDP special-cases the same value.
+fn prog_quant_for(
+    quality: u8,
+    prog_quant_vals: &[ironrdp_pdu::codecs::rfx::progressive::ProgressiveCodecQuant],
+) -> Result<ironrdp_pdu::codecs::rfx::progressive::ProgressiveCodecQuant, ProgressiveDecodeError> {
+    use ironrdp_pdu::codecs::rfx::progressive::{ComponentCodecQuant, ProgressiveCodecQuant};
+
+    const FULL_QUALITY: u8 = 0xFF;
+    const NO_QUANTIZATION: ComponentCodecQuant = ComponentCodecQuant {
+        ll3: 0,
+        hl3: 0,
+        lh3: 0,
+        hh3: 0,
+        hl2: 0,
+        lh2: 0,
+        hh2: 0,
+        hl1: 0,
+        lh1: 0,
+        hh1: 0,
+    };
+
+    if quality == FULL_QUALITY {
+        return Ok(ProgressiveCodecQuant {
+            quality: FULL_QUALITY,
+            y_quant: NO_QUANTIZATION,
+            cb_quant: NO_QUANTIZATION,
+            cr_quant: NO_QUANTIZATION,
+        });
+    }
+
+    let idx = usize::from(quality);
+    prog_quant_vals
+        .get(idx)
+        .copied()
+        .ok_or(ProgressiveDecodeError::InvalidQuantIndex {
+            index: idx,
+            table_len: prog_quant_vals.len(),
+        })
+}
+
 #[expect(
     clippy::similar_names,
     reason = "q_y/q_cb/q_cr are standard component quant index names"
@@ -1244,14 +1292,7 @@ fn decode_tile_block(
                 });
             }
 
-            let pq_idx = usize::from(tile.quality);
-            if pq_idx >= prog_quant_vals.len() {
-                return Err(ProgressiveDecodeError::InvalidQuantIndex {
-                    index: pq_idx,
-                    table_len: prog_quant_vals.len(),
-                });
-            }
-            let pq = &prog_quant_vals[pq_idx];
+            let pq = prog_quant_for(tile.quality, prog_quant_vals)?;
 
             tile_state.decode_first(
                 [tile.y_data, tile.cb_data, tile.cr_data],
@@ -1281,14 +1322,7 @@ fn decode_tile_block(
                 return Ok(Vec::new());
             }
 
-            let pq_idx = usize::from(tile.quality);
-            if pq_idx >= prog_quant_vals.len() {
-                return Err(ProgressiveDecodeError::InvalidQuantIndex {
-                    index: pq_idx,
-                    table_len: prog_quant_vals.len(),
-                });
-            }
-            let pq = &prog_quant_vals[pq_idx];
+            let pq = prog_quant_for(tile.quality, prog_quant_vals)?;
 
             tile_state.decode_upgrade(
                 [tile.y_srl_data, tile.cb_srl_data, tile.cr_srl_data],
