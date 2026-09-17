@@ -461,3 +461,60 @@ git commit -m "docs: record the legacy TLS fallback and EGFX requirement"
 **Placeholders:** Two steps (Task 3 Step 6, Task 4 Step 2) carry an explicit "check the API before writing the final form" caveat rather than a fabricated signature — `DecodedImage::data_mut` and the reactivation entry point were not verified against the 0.11/0.10 sources while writing this plan. Every other code block is copied from verified signatures. Resolve those two by reading the crate source, not by guessing.
 
 **Type consistency:** `SurfaceUpdates`/`SurfaceUpdate` are defined in Task 3 Step 3 and used in Steps 1, 5 and 6 with matching field names and types. `ActiveStageBuilder`'s fields match `ConnectionResult`'s exactly as of connector 0.10 / session 0.11.
+
+---
+
+## Status at end of 2026-09-17
+
+`spftp` renders. What was a black screen this morning is a working session:
+TLS connects, the graphics pipeline is open, and every path the server paints
+with is implemented — ClearCodec (bitmaps, bands, residual, glyph cache),
+NSCodec, RFX Progressive, solid fills, cache store/blit, and region copies.
+
+### Fixed today, in order
+
+| Fix | Whose bug |
+|---|---|
+| Legacy TLS fallback (merged to `main`) | ours — unimplemented |
+| Advertise `SUPPORT_DYN_VC_GFX_PROTOCOL` | ironrdp — never set |
+| ClearCodec RLEX single-entry palette | ironrdp (open upstream issue #1902) |
+| ClearCodec short V-bar field order | ironrdp (**already fixed on master**) |
+| Progressive context flag across context ids | ironrdp (**already fixed on master**) |
+| Progressive `quality == 0xFF` lossless sentinel | ironrdp (**already fixed on master**) |
+| NSCodec subcodec — silent no-op returning black | ironrdp — unimplemented |
+| NSCodec raw/absent plane encodings | ours — in the decoder written today |
+| Per-row clipping of every framebuffer write | ours — in the first EGFX commit |
+| Progressive output left in the quantisation domain | ironrdp — missing `>> 5` |
+| Deactivate All → reactivation | ours — dropped output |
+
+### Open: grey relief on hover
+
+Hovering an image that zooms leaves a mid-grey embossed region: refinement
+detail with no low-frequency base under it. The server opens a new codec
+context id repeatedly (2, 3, 4 … 16 in one session), and each new context
+starts with an empty tile grid, so an upgrade pass arriving against it has
+nothing to refine.
+
+Note that upstream `master` reworked exactly this: contexts keyed by
+`(surface_id, codec_context_id)`, plus `references` and `frame_tiles`
+tracking that published 0.9.0 lacks. Check whether porting that resolves it
+before writing anything new.
+
+The diagnostics in the last commit report each new context id alongside the
+running grey-tile count; if grey tiles appear in lockstep with a new context,
+that is the mechanism.
+
+### Before merging
+
+- Strip every occurrence of `TEMPORARY` in `src-tauri/src` — framebuffer PNG
+  snapshots, clipping/grey/black counters, surface and context logging, the
+  cache-miss counter, and the `tracing` subscriber plus its two dependencies
+  in `Cargo.toml`.
+- Decide on the vendored crates. Three of the four ironrdp patches are already
+  fixed on their `master` and only await a release; only the RLEX one (issue
+  #1902) and the genuinely new work (NSCodec, the graphics-pipeline flag, the
+  `>> 5`) would need to persist. Tests inside `vendor/` do not run under the
+  app's `cargo test`, so those patches are untested from CI's point of view.
+- Consider sending the NSCodec implementation and the `>> 5` fix upstream;
+  both are reproducible with captured payloads and neither is specific to this
+  application.
