@@ -12,7 +12,9 @@
 
 use std::sync::{Arc, Mutex};
 
+use ironrdp::graphics::clearcodec::ClearCodecDecoder;
 use ironrdp_egfx::client::{BitmapUpdate, GraphicsPipelineHandler};
+use ironrdp_egfx::pdu::{Codec1Type, GfxPdu};
 
 /// One decoded rectangle, in the framebuffer's coordinate space.
 pub struct SurfaceUpdate {
@@ -43,11 +45,21 @@ impl SurfaceUpdates {
 pub struct Handler {
     updates: SurfaceUpdates,
     session_id: String,
+    /// ClearCodec keeps glyph and v-bar caches across frames, so one decoder
+    /// has to live for the whole session.
+    clear: ClearCodecDecoder,
+    /// Codecs seen that we cannot decode, logged once each rather than per PDU.
+    unsupported_logged: Vec<String>,
 }
 
 impl Handler {
     pub fn new(updates: SurfaceUpdates, session_id: String) -> Self {
-        Self { updates, session_id }
+        Self {
+            updates,
+            session_id,
+            clear: ClearCodecDecoder::new(),
+            unsupported_logged: Vec::new(),
+        }
     }
 }
 
@@ -66,6 +78,56 @@ impl GraphicsPipelineHandler for Handler {
             width: update.width,
             height: update.height,
             rgba: update.data.clone(),
+        });
+    }
+
+    /// `ironrdp-egfx` decodes only AVC and uncompressed bitmaps; everything else
+    /// is handed over whole, `bitmap_data` included. ClearCodec is the codec
+    /// Windows paints desktops with, and `ironrdp-graphics` can decode it — it
+    /// is simply not wired into the EGFX client.
+    fn on_unhandled_pdu(&mut self, pdu: &GfxPdu) {
+        let GfxPdu::WireToSurface1(pdu) = pdu else {
+            return;
+        };
+
+        if pdu.codec_id != Codec1Type::ClearCodec {
+            let name = format!("{:?}", pdu.codec_id);
+            if !self.unsupported_logged.contains(&name) {
+                log::warn!(
+                    "[rdp {}] egfx codec {name} is not decoded; those regions stay unpainted",
+                    self.session_id,
+                );
+                self.unsupported_logged.push(name);
+            }
+            return;
+        }
+
+        let rect = &pdu.destination_rectangle;
+        let width = rect.right.saturating_sub(rect.left);
+        let height = rect.bottom.saturating_sub(rect.top);
+        if width == 0 || height == 0 {
+            return;
+        }
+
+        let mut bgra = match self.clear.decode(&pdu.bitmap_data, width, height) {
+            Ok(pixels) => pixels,
+            Err(e) => {
+                log::warn!("[rdp {}] clearcodec decode failed: {e}", self.session_id);
+                return;
+            }
+        };
+
+        // The decoder emits BGRA; the framebuffer and the canvas are RGBA.
+        for px in bgra.chunks_exact_mut(4) {
+            px.swap(0, 2);
+        }
+
+        self.updates.push(SurfaceUpdate {
+            x: rect.left,
+            y: rect.top,
+            width,
+            height,
+            rgba: bgra,
         });
     }
 
