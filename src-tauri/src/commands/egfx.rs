@@ -91,6 +91,7 @@ pub struct Handler {
     clipped: u32,
     tiles_clipped: u32,
     tiles_grey: u32,
+    contexts_seen: Vec<u32>,
     tile_simple: u32,
     tile_first: u32,
     tile_upgrade: u32,
@@ -126,6 +127,7 @@ impl Handler {
             clipped: 0,
             tiles_clipped: 0,
             tiles_grey: 0,
+            contexts_seen: Vec::new(),
             tile_simple: 0,
             tile_first: 0,
             tile_upgrade: 0,
@@ -459,6 +461,17 @@ impl GraphicsPipelineHandler for Handler {
             }
         }
 
+        if !self.contexts_seen.contains(&pdu.codec_context_id) {
+            self.contexts_seen.push(pdu.codec_context_id);
+            log::warn!(
+                "[rdp {}] progressive context {} first seen (tiles so far {}, grey {})",
+                self.session_id,
+                pdu.codec_context_id,
+                self.tiles_decoded,
+                self.tiles_grey,
+            );
+        }
+
         let tiles = match self.progressive.decode_bitmap(
             pdu.codec_context_id,
             width,
@@ -495,12 +508,20 @@ impl GraphicsPipelineHandler for Handler {
             // A tile whose coefficients all decode to zero reconstructs as flat
             // mid-grey: only the luma offset survives. That is a different
             // failure from clipping and points at the pass that produced it.
-            if tile
-                .pixels
-                .chunks_exact(4)
-                .all(|px| px[..3].iter().all(|&c| c.abs_diff(128) <= 2))
-            {
-                self.tiles_grey += 1;
+            // Detail without its low-frequency base reconstructs as relief on
+            // mid-grey: the mean sits at the luma offset while pixels still
+            // vary. Flat-grey alone missed it.
+            let n = tile.pixels.len() / 4;
+            if n > 0 {
+                let sum: u32 = tile
+                    .pixels
+                    .chunks_exact(4)
+                    .map(|px| u32::from(px[0]) + u32::from(px[1]) + u32::from(px[2]))
+                    .sum();
+                let mean = sum / (n as u32 * 3);
+                if mean.abs_diff(128) <= 6 {
+                    self.tiles_grey += 1;
+                }
             }
             if tile.pixels.chunks_exact(4).all(|px| px[0] == 0 && px[1] == 0 && px[2] == 0) {
                 self.tiles_black += 1;
