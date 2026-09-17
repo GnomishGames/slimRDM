@@ -573,6 +573,21 @@ where
                             }
                             egfx_cache.insert(slot, (width, height, pixels));
                         }
+                        egfx::SurfaceOp::Copy { x, y, width, height, points } => {
+                            // Read the source out first: destinations may overlap it.
+                            let row_len = width as usize * 4;
+                            let mut pixels = Vec::with_capacity(row_len * height as usize);
+                            for row in 0..height as usize {
+                                let start = (y as usize + row) * stride + x as usize * 4;
+                                if start + row_len <= fb.len() {
+                                    pixels.extend_from_slice(&fb[start..start + row_len]);
+                                }
+                            }
+                            for (dx, dy) in points {
+                                blit(fb, stride, dx, dy, width, height, &pixels);
+                                touched.push((dx, dy, width, height));
+                            }
+                        }
                         egfx::SurfaceOp::FromCache { slot, points } => {
                             if let Some((width, height, pixels)) = egfx_cache.get(&slot) {
                                 for (x, y) in points {

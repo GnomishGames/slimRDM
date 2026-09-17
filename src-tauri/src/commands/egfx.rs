@@ -39,6 +39,15 @@ pub enum SurfaceOp {
     ToCache { slot: u16, x: u16, y: u16, width: u16, height: u16 },
     /// Blit a cached region back to each destination point.
     FromCache { slot: u16, points: Vec<(u16, u16)> },
+    /// Copy a framebuffer region to each destination point. The server uses
+    /// this rather than redrawing when content moves, e.g. a dragged window.
+    Copy {
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        points: Vec<(u16, u16)>,
+    },
 }
 
 /// Shared hand-off from the channel to the session loop.
@@ -201,11 +210,28 @@ impl GraphicsPipelineHandler for Handler {
         });
     }
 
-    fn on_surface_to_surface(&mut self, _pdu: &ironrdp_egfx::pdu::SurfaceToSurfacePdu) {
-        self.ops.surface_to_surface += 1;
-        if self.ops.surface_to_surface == 1 {
-            log::warn!("[rdp {}] egfx SurfaceToSurface is not applied", self.session_id);
+    fn on_surface_to_surface(&mut self, pdu: &ironrdp_egfx::pdu::SurfaceToSurfacePdu) {
+        // Only one surface is ever mapped to the output here, so a copy between
+        // surface ids would have nowhere to land; skip rather than paint wrongly.
+        if pdu.source_surface_id != pdu.destination_surface_id {
+            self.ops.surface_to_surface += 1;
+            if self.ops.surface_to_surface == 1 {
+                log::warn!(
+                    "[rdp {}] egfx SurfaceToSurface across surfaces is not applied",
+                    self.session_id,
+                );
+            }
+            return;
         }
+
+        let r = &pdu.source_rectangle;
+        self.updates.push(SurfaceOp::Copy {
+            x: r.left,
+            y: r.top,
+            width: r.right.saturating_sub(r.left),
+            height: r.bottom.saturating_sub(r.top),
+            points: pdu.destination_points.iter().map(|p| (p.x, p.y)).collect(),
+        });
     }
 
     fn on_surface_to_cache(&mut self, pdu: &ironrdp_egfx::pdu::SurfaceToCachePdu) {
