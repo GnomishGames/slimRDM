@@ -427,6 +427,26 @@ pub(crate) fn is_handshake_refusal(error: &std::io::Error) -> bool {
     )
 }
 
+/// Read a rectangle out of the framebuffer, clipped to the surface.
+///
+/// Returns the width actually read alongside the pixels, because a rectangle
+/// overhanging the right edge yields a narrower copy.
+fn read_rect(fb: &[u8], stride: usize, x: u16, y: u16, width: u16, height: u16) -> (u16, Vec<u8>) {
+    let surface_width = stride / 4;
+    let visible = usize::from(width).min(surface_width.saturating_sub(usize::from(x)));
+    let row_len = visible * 4;
+    let mut pixels = Vec::with_capacity(row_len * usize::from(height));
+
+    for row in 0..usize::from(height) {
+        let start = (usize::from(y) + row) * stride + usize::from(x) * 4;
+        if row_len > 0 && start + row_len <= fb.len() {
+            pixels.extend_from_slice(&fb[start..start + row_len]);
+        }
+    }
+
+    (u16::try_from(visible).unwrap_or(width), pixels)
+}
+
 /// Copy an RGBA rectangle into the framebuffer, clipped to the surface.
 ///
 /// Clipping has to be per row against the surface width, not against the
@@ -585,34 +605,17 @@ where
                             }
                         }
                         egfx::SurfaceOp::ToCache { slot, x, y, width, height } => {
-                            let surface_width = stride / 4;
-                            let visible = (width as usize)
-                                .min(surface_width.saturating_sub(x as usize));
-                            let mut pixels = Vec::with_capacity(visible * height as usize * 4);
-                            let row_len = visible * 4;
-                            for row in 0..height as usize {
-                                let start = (y as usize + row) * stride + x as usize * 4;
-                                if row_len > 0 && start + row_len <= fb.len() {
-                                    pixels.extend_from_slice(&fb[start..start + row_len]);
-                                }
-                            }
-                            let stored_width = u16::try_from(visible).unwrap_or(width);
+                            let (stored_width, pixels) = read_rect(fb, stride, x, y, width, height);
                             egfx_cache.insert(slot, (stored_width, height, pixels));
+                        }
+                        egfx::SurfaceOp::EvictCache { slot } => {
+                            // The server has told us it will not reference this
+                            // slot again; holding the copy wastes memory.
+                            egfx_cache.remove(&slot);
                         }
                         egfx::SurfaceOp::Copy { x, y, width, height, points } => {
                             // Read the source out first: destinations may overlap it.
-                            let surface_width = stride / 4;
-                            let visible = (width as usize)
-                                .min(surface_width.saturating_sub(x as usize));
-                            let row_len = visible * 4;
-                            let mut pixels = Vec::with_capacity(row_len * height as usize);
-                            for row in 0..height as usize {
-                                let start = (y as usize + row) * stride + x as usize * 4;
-                                if row_len > 0 && start + row_len <= fb.len() {
-                                    pixels.extend_from_slice(&fb[start..start + row_len]);
-                                }
-                            }
-                            let copied_width = u16::try_from(visible).unwrap_or(width);
+                            let (copied_width, pixels) = read_rect(fb, stride, x, y, width, height);
                             for (dx, dy) in points {
                                 blit(fb, stride, dx, dy, copied_width, height, &pixels);
                                 touched.push((dx, dy, copied_width, height));
@@ -721,6 +724,27 @@ where
                 // alone would just put it somewhere the real mouse isn't.
                 ActiveStageOutput::PointerPosition { .. } => {}
                 ActiveStageOutput::GraphicsUpdate(region) => {
+                    // Frames are emitted from one buffer, and the graphics
+                    // pipeline's takes over as soon as it exists. A host that
+                    // paints through both paths would otherwise have its
+                    // legacy updates read out of a buffer nothing wrote them
+                    // to, so copy the region across.
+                    if let Some(fb) = egfx_fb.as_deref_mut() {
+                        let stride = usize::from(image.width()) * 4;
+                        let width = region.right.saturating_sub(region.left) + 1;
+                        let height = region.bottom.saturating_sub(region.top) + 1;
+                        let row_len = usize::from(width) * 4;
+                        let src = image.data();
+                        for row in 0..usize::from(height) {
+                            let offset =
+                                (usize::from(region.top) + row) * stride + usize::from(region.left) * 4;
+                            if offset + row_len <= fb.len() && offset + row_len <= src.len() {
+                                fb[offset..offset + row_len]
+                                    .copy_from_slice(&src[offset..offset + row_len]);
+                            }
+                        }
+                    }
+
                     // Merge into pending dirty union — never drop a region
                     pending_dirty = Some(match pending_dirty {
                         None => (region.left, region.top, region.right, region.bottom),
@@ -850,8 +874,10 @@ where
                 }
                 let _ = app.emit("rdp-frame", RdpFrameEvent {
                     session_id: session_id.clone(),
-                    x: left,
-                    y: top,
+                    // The clamped origin, matching where the pixels were read
+                    // from — an op can report a rectangle that overhangs.
+                    x: u16::try_from(x).unwrap_or(left),
+                    y: u16::try_from(y).unwrap_or(top),
                     width: w as u16,
                     height: h as u16,
                     full_width: image.width(),
@@ -884,6 +910,9 @@ where
                 // and the fast-path decoder have to follow it.
                 image = DecodedImage::new(PixelFormat::RgbA32, desktop_size.width, desktop_size.height);
                 egfx_fb = None;
+                // Cached regions were captured from the framebuffer that just
+                // went away, and may not even match the new geometry.
+                egfx_cache.clear();
                 pending_dirty = None;
                 active_stage.set_share_id(share_id);
                 active_stage.set_enable_server_pointer(enable_server_pointer);

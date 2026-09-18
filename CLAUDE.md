@@ -44,8 +44,13 @@ only a TCP reset.
 legacy bitmap codecs but never produce them, so a client without the channel gets
 a healthy, logged-on session (clipboard and all) on a permanently blank canvas.
 ironrdp defines `SUPPORT_DYN_VC_GFX_PROTOCOL` but never sets it, which is the only
-reason `vendor/ironrdp-connector` exists. EGFX surfaces are blitted into their own
-framebuffer in `commands/egfx.rs` because `DecodedImage` exposes no mutable data.
+reason `vendor/ironrdp-connector` exists. `commands/egfx.rs` decodes and queues
+operations; every framebuffer write lives in `commands/rdp.rs` (`blit`, and the
+op loop in `run_session`), in a framebuffer of its own because `DecodedImage`
+exposes no mutable data. Clipping there is per row against the surface width —
+tiles are always 64 wide, so the right-hand column overhangs any desktop whose
+width is not a multiple of 64, and checking against the buffer length instead
+wraps those pixels onto the next row.
 
 **Server Deactivate All** — sent when a client reconnects to an existing session.
 Until the client reruns the capability exchange the server sends no graphics,

@@ -84,10 +84,15 @@ russh = { path = "vendor/russh" }
 # Upstream never advertises SUPPORT_DYN_VC_GFX_PROTOCOL, so no server opens
 # the graphics pipeline channel. See commands/egfx.rs.
 ironrdp-connector = { path = "vendor/ironrdp-connector" }
-# ClearCodec RLEX mis-parses a single-entry palette; see commands/egfx.rs tests.
+# ClearCodec RLEX mis-parses a single-entry palette (upstream issue #1902, still
+# open); the short V-bar cache miss reads its two fields in the wrong order
+# (fixed on upstream master, unreleased); and TILE_FLAG_DIFFERENCE is backported
+# for the progressive decoder below. See the tests in commands/egfx.rs.
 ironrdp-pdu = { path = "vendor/ironrdp-pdu" }
-# Progressive contexts: the band-layout flag is per negotiation, not per
-# context id. See commands/egfx.rs.
+# Carries the NSCodec subcodec, which upstream leaves as a no-op that silently
+# returns black, plus verbatim copies of upstream master's progressive.rs and
+# srl.rs (difference tiles, and dequantisation relative to 6 rather than 1).
+# Those two files drop out at the next ironrdp release; NSCodec does not.
 ironrdp-graphics = { path = "vendor/ironrdp-graphics" }
 
 [profile.release]

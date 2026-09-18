@@ -11,3 +11,4 @@ homeslice.json
 # Vendored crates are patched sources only; their build output belongs in the
 # app's target directory, not here.
 src-tauri/vendor/*/target/
+.claude/

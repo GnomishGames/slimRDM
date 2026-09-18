@@ -20,7 +20,6 @@ fn init_logger(data_dir: std::path::PathBuf) {
             .format_timestamp_secs()
             .init();
     }
-
 }
 
 

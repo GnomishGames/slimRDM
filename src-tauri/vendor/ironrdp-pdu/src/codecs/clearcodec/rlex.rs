@@ -77,7 +77,6 @@ pub fn decode_rlex(data: &[u8]) -> DecodeResult<RlexData> {
 
     // Decode segments from remaining bytes
     let mut segments = Vec::new();
-    let remaining = src.len();
 
     // PATCH (slimRDM): every segment carries the packed stopIndex/suiteDepth
     // byte, including when the palette has a single entry. Treating that case as
@@ -86,20 +85,21 @@ pub fn decode_rlex(data: &[u8]) -> DecodeResult<RlexData> {
     // then failed with "suite exceeds region pixel count" and the region was
     // left unpainted. Verified against captured payloads whose pixel counts
     // match the region exactly once the packed byte is honoured.
-    decode_multi_palette_segments(remaining, &mut src, stop_index_bits, suite_depth_bits, &mut segments)?;
+    decode_multi_palette_segments(&mut src, stop_index_bits, suite_depth_bits, &mut segments)?;
 
     Ok(RlexData { palette, segments })
 }
 
 fn decode_multi_palette_segments(
-    _remaining: usize,
     src: &mut ReadCursor<'_>,
     stop_index_bits: u8,
     suite_depth_bits: u8,
     segments: &mut Vec<RlexSegment>,
 ) -> DecodeResult<()> {
-    // `1u8 << 8` overflows, and suite_depth_bits is 8 for a single-entry palette.
-    let stop_mask = if stop_index_bits >= 8 { u8::MAX } else { (1u8 << stop_index_bits) - 1 };
+    // A single-entry palette spends all eight bits on the suite depth, and
+    // `1u8 << 8` overflows. The stop index never needs eight: the palette holds
+    // at most 127 entries, so `stop_index_bits` is 7 at most.
+    let stop_mask = (1u8 << stop_index_bits) - 1;
     let depth_mask = if suite_depth_bits >= 8 { u8::MAX } else { (1u8 << suite_depth_bits) - 1 };
 
     while !src.is_empty() {

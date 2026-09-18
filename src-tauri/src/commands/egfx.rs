@@ -40,6 +40,8 @@ pub enum SurfaceOp {
     ToCache { slot: u16, x: u16, y: u16, width: u16, height: u16 },
     /// Blit a cached region back to each destination point.
     FromCache { slot: u16, points: Vec<(u16, u16)> },
+    /// Drop a cached region the server has evicted.
+    EvictCache { slot: u16 },
     /// Copy a framebuffer region to each destination point. The server uses
     /// this rather than redrawing when content moves, e.g. a dragged window.
     Copy {
@@ -76,6 +78,10 @@ pub struct Handler {
     /// long-lived. Surface dimensions come from the reset-graphics PDU.
     progressive: ProgressiveDecoder,
     surface_size: (u16, u16),
+    frame_open: bool,
+    /// The surface mapped to the output. Updates for any other surface are
+    /// offscreen composition and must not reach the visible framebuffer.
+    output_surface: Option<u16>,
     /// Codecs seen that we cannot decode, logged once each rather than per PDU.
     unsupported_logged: Vec<String>,
     seen_errors: Vec<String>,
@@ -97,6 +103,8 @@ impl Handler {
             clear: ClearCodecDecoder::new(),
             progressive: ProgressiveDecoder::new(),
             surface_size: (0, 0),
+            frame_open: false,
+            output_surface: None,
             unsupported_logged: Vec::new(),
             seen_errors: Vec::new(),
             ops: IgnoredOps::default(),
@@ -104,8 +112,24 @@ impl Handler {
     }
 }
 
+impl Handler {
+    /// Whether updates for this surface belong on the visible framebuffer.
+    ///
+    /// Everything is painted into one buffer at face value, so an update for a
+    /// surface the server has not mapped to the output is offscreen
+    /// composition and would land on the user's desktop. Before any mapping is
+    /// announced there is only one surface in play, so updates are accepted.
+    fn paints_output(&self, surface_id: u16) -> bool {
+        self.output_surface.is_none_or(|mapped| mapped == surface_id)
+    }
+}
+
 impl GraphicsPipelineHandler for Handler {
     fn on_bitmap_updated(&mut self, update: &BitmapUpdate) {
+        if !self.paints_output(update.surface_id) {
+            return;
+        }
+
         // Empty data means the decode was skipped — an AVC frame with no H.264
         // decoder configured. Drawing it would paint a black rectangle over
         // whatever is already there.
@@ -130,6 +154,10 @@ impl GraphicsPipelineHandler for Handler {
         let GfxPdu::WireToSurface1(pdu) = pdu else {
             return;
         };
+
+        if !self.paints_output(pdu.surface_id) {
+            return;
+        }
 
         if pdu.codec_id != Codec1Type::ClearCodec {
             let name = format!("{:?}", pdu.codec_id);
@@ -192,6 +220,8 @@ impl GraphicsPipelineHandler for Handler {
     }
 
     fn on_surface_mapped(&mut self, surface_id: u16, origin_x: u32, origin_y: u32) {
+        self.output_surface = Some(surface_id);
+
         // Everything is painted into one framebuffer at face value. A surface
         // mapped away from the origin breaks that assumption and would put
         // content in the wrong place, so say so rather than fail silently.
@@ -213,6 +243,10 @@ impl GraphicsPipelineHandler for Handler {
     }
 
     fn on_solid_fill(&mut self, pdu: &ironrdp_egfx::pdu::SolidFillPdu) {
+        if !self.paints_output(pdu.surface_id) {
+            return;
+        }
+
         let c = &pdu.fill_pixel;
         let rects = pdu
             .rectangles
@@ -259,6 +293,10 @@ impl GraphicsPipelineHandler for Handler {
     }
 
     fn on_surface_to_cache(&mut self, pdu: &ironrdp_egfx::pdu::SurfaceToCachePdu) {
+        if !self.paints_output(pdu.surface_id) {
+            return;
+        }
+
         let r = &pdu.source_rectangle;
         self.updates.push(SurfaceOp::ToCache {
             slot: pdu.cache_slot,
@@ -270,6 +308,10 @@ impl GraphicsPipelineHandler for Handler {
     }
 
     fn on_cache_to_surface(&mut self, pdu: &ironrdp_egfx::pdu::CacheToSurfacePdu) {
+        if !self.paints_output(pdu.surface_id) {
+            return;
+        }
+
         self.updates.push(SurfaceOp::FromCache {
             slot: pdu.cache_slot,
             points: pdu.destination_points.iter().map(|p| (p.x, p.y)).collect(),
@@ -279,9 +321,22 @@ impl GraphicsPipelineHandler for Handler {
     /// RFX Progressive refines a tile grid over successive passes, so each PDU
     /// updates decoder state rather than standing alone.
     fn on_wire_to_surface2(&mut self, pdu: &ironrdp_egfx::pdu::WireToSurface2Pdu) {
+        if !self.paints_output(pdu.surface_id) {
+            return;
+        }
+
         let (width, height) = self.surface_size;
         if width == 0 || height == 0 {
             return;
+        }
+
+        // A frame's REGION blocks can span several payloads, and the decoder
+        // shares tiles across them only while a frame is open. The 0.3 handler
+        // trait has no frame-begin hook, so open one on the first payload and
+        // let `on_frame_complete` close it.
+        if !self.frame_open {
+            self.progressive.begin_frame();
+            self.frame_open = true;
         }
 
         let tiles = match self.progressive.decode_bitmap(
@@ -305,24 +360,77 @@ impl GraphicsPipelineHandler for Handler {
             }
         };
 
-        // Tiles are a fixed 64x64 on a grid; the blit clips at the framebuffer
-        // edge, which is what trims the partial tiles along the right and
-        // bottom of a surface that is not a multiple of 64.
+        // A tile is 64x64 on a grid, but only the part of it the server's
+        // REGION covers may be painted: the decoder reconstructs whole tiles
+        // from retained state, including tiles an earlier REGION in the same
+        // frame touched. Blitting all 4096 pixels would repaint whatever
+        // ClearCodec, a fill or a cache blit has put in the rest of that tile
+        // since its last refinement.
         for tile in tiles {
-            self.updates.push(SurfaceOp::Bitmap {
-                x: tile.x_idx.saturating_mul(64),
-                y: tile.y_idx.saturating_mul(64),
-                width: 64,
-                height: 64,
-                rgba: tile.pixels,
-            });
+            let origin_x = tile.x_idx.saturating_mul(64);
+            let origin_y = tile.y_idx.saturating_mul(64);
+
+            for rect in &tile.update_rectangles {
+                let width = rect.right.saturating_sub(rect.left);
+                let height = rect.bottom.saturating_sub(rect.top);
+                if width == 0 || height == 0 {
+                    continue;
+                }
+
+                // The rectangle is surface-relative; cut the matching window
+                // out of the tile's own 64x64 buffer.
+                let inner_x = usize::from(rect.left.saturating_sub(origin_x));
+                let inner_y = usize::from(rect.top.saturating_sub(origin_y));
+                let mut rgba = Vec::with_capacity(usize::from(width) * usize::from(height) * 4);
+                for row in 0..usize::from(height) {
+                    let start = ((inner_y + row) * 64 + inner_x) * 4;
+                    let end = start + usize::from(width) * 4;
+                    if end <= tile.pixels.len() {
+                        rgba.extend_from_slice(&tile.pixels[start..end]);
+                    }
+                }
+                if rgba.len() != usize::from(width) * usize::from(height) * 4 {
+                    continue;
+                }
+
+                self.updates.push(SurfaceOp::Bitmap {
+                    x: rect.left,
+                    y: rect.top,
+                    width,
+                    height,
+                    rgba,
+                });
+            }
         }
     }
 
-    /// The decoder retains sub-band references only for the duration of a
-    /// frame; closing the frame discards them.
+    /// Close the frame the payloads were bracketed into.
+    ///
+    /// This discards the per-frame tile set, so REGION blocks in the next
+    /// frame start clean. Sub-band references are surface-scoped and survive.
     fn on_frame_complete(&mut self, _frame_id: u32) {
         self.progressive.end_frame();
+        self.frame_open = false;
+    }
+
+    /// Progressive state is ~37 KB per tile and this server rotates codec
+    /// context ids mid-session, so a context nobody frees accumulates.
+    fn on_delete_encoding_context(&mut self, pdu: &ironrdp_egfx::pdu::DeleteEncodingContextPdu) {
+        self.progressive.delete_context(pdu.surface_id, pdu.codec_context_id);
+    }
+
+    /// Dropping a surface must also drop its sub-band references: a later
+    /// surface reusing the id would otherwise reconstruct a difference tile
+    /// against the previous surface's content.
+    fn on_surface_deleted(&mut self, surface_id: u16) {
+        self.progressive.delete_surface(surface_id);
+        if self.output_surface == Some(surface_id) {
+            self.output_surface = None;
+        }
+    }
+
+    fn on_evict_cache_entry(&mut self, pdu: &ironrdp_egfx::pdu::EvictCacheEntryPdu) {
+        self.updates.push(SurfaceOp::EvictCache { slot: pdu.cache_slot });
     }
 
     fn on_close(&mut self) {
