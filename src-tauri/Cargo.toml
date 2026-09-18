@@ -49,9 +49,6 @@ russh-keys = "0.44"
 # Logging
 log = "0.4"
 env_logger = "0.11"
-# TEMPORARY: capture ironrdp auto-detect handling.
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # RDP
 ironrdp = { version = "0.17", features = ["connector", "session", "graphics", "pdu", "cliprdr", "core", "dvc", "svc"] }

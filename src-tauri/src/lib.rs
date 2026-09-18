@@ -21,22 +21,6 @@ fn init_logger(data_dir: std::path::PathBuf) {
             .init();
     }
 
-    // TEMPORARY: ironrdp reports auto-detect handling through `tracing`, which
-    // env_logger does not see. Capture just the session layer to find out
-    // whether the server is asking for bandwidth measurements we never answer.
-    if let Ok(trace_file) = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(data_dir.join("ironrdp-trace.log"))
-    {
-        use tracing_subscriber::filter::EnvFilter;
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::new("ironrdp_session=debug,ironrdp_connector=info"))
-            .with_ansi(false)
-            .with_writer(std::sync::Mutex::new(trace_file))
-            .try_init();
-    }
 }
 
 

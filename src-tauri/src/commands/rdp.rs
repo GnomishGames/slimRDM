@@ -527,9 +527,6 @@ where
         _                 => Duration::from_millis(16),  // ~60fps (auto/default)
     };
     let mut last_frame = Instant::now();
-    // TEMPORARY: snapshot the framebuffer so the decoded result can be examined
-    // directly rather than described second-hand.
-    let mut last_dump = Instant::now();
     // Graphics pipeline hosts paint here instead of into `image`, which exposes
     // no mutable data. Allocated on the first update, so legacy servers pay
     // nothing for it.
@@ -630,16 +627,13 @@ where
                                     }
                                 }
                                 None => {
-                                    // TEMPORARY: a blit from a slot we never
-                                    // stored leaves the framebuffer's initial
-                                    // black exactly where content belongs.
+                                    // A blit from a slot we never stored leaves
+                                    // the framebuffer untouched where content
+                                    // belongs, so it is worth knowing about.
                                     egfx_cache_misses += 1;
-                                    if egfx_cache_misses <= 10 {
-                                        log::warn!(
-                                            "[rdp {session_id}] egfx cache slot {slot} never stored; \
-                                             {} destinations left unpainted, first {:?}",
-                                            points.len(),
-                                            points.first(),
+                                    if egfx_cache_misses == 1 {
+                                        log::debug!(
+                                            "[rdp {session_id}] egfx cache slot {slot} blitted before it was stored",
                                         );
                                     }
                                 }
@@ -854,22 +848,6 @@ where
                         pixels.extend_from_slice(&src[start..end]);
                     }
                 }
-                // TEMPORARY: one snapshot every 8s, of whichever framebuffer
-                // this session is painting into.
-                if last_dump.elapsed() >= Duration::from_secs(8) {
-                    last_dump = Instant::now();
-                    let (fw, fh) = (image.width(), image.height());
-                    let snapshot: Vec<u8> = src.to_vec();
-                    let path = std::env::temp_dir().join("slimrdm-frame.png");
-                    std::thread::spawn(move || {
-                        if let Some(buf) =
-                            image::RgbaImage::from_raw(u32::from(fw), u32::from(fh), snapshot)
-                        {
-                            let _ = buf.save(&path);
-                        }
-                    });
-                }
-
                 let _ = app.emit("rdp-frame", RdpFrameEvent {
                     session_id: session_id.clone(),
                     x: left,
