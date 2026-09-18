@@ -473,6 +473,7 @@ impl GraphicsPipelineHandler for Handler {
         }
 
         let tiles = match self.progressive.decode_bitmap(
+            pdu.surface_id,
             pdu.codec_context_id,
             width,
             height,
@@ -553,6 +554,12 @@ impl GraphicsPipelineHandler for Handler {
                 rgba: tile.pixels,
             });
         }
+    }
+
+    /// The decoder retains sub-band references only for the duration of a
+    /// frame; closing the frame discards them.
+    fn on_frame_complete(&mut self, _frame_id: u32) {
+        self.progressive.end_frame();
     }
 
     fn on_close(&mut self) {

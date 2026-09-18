@@ -24,6 +24,14 @@ const TILE_SIZE: u16 = 0x0040;
 /// Block header size as u32 for checked_sub arithmetic (avoids `as` cast).
 const BLOCK_HEADER_SIZE_U32: u32 = 6;
 
+/// Set in a tile's `flags` when its coefficients are a difference from the
+/// retained reference for that tile position, rather than absolute values.
+///
+/// PATCH (slimRDM): backported from upstream, which the vendored progressive
+/// decoder now needs. Without it the decoder treated difference tiles as
+/// absolute and rendered the delta — mid-grey with edges in relief.
+pub const TILE_FLAG_DIFFERENCE: u8 = 0x01;
+
 /// Progressive block type discriminator.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
