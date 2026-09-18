@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.8.0] - 2026-09-18
 
 ### Security
 - **cryptoki updated past an out-of-bounds read** — cryptoki 0.10.0 could read out of bounds when decoding `CKA_ALLOWED_MECHANISMS` ([RUSTSEC-2026-0286](https://rustsec.org/advisories/RUSTSEC-2026-0286), published 16 September 2026). It reaches this app through ironrdp-connector's use of sspi, and `cargo audit` is a required check, so it has been updated to 0.10.1.
