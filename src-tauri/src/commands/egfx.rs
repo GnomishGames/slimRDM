@@ -198,7 +198,8 @@ impl GraphicsPipelineHandler for Handler {
         };
 
         // The decoder emits BGRA; the framebuffer and the canvas are RGBA.
-        for px in bgra.chunks_exact_mut(4) {
+        let (pixels, _) = bgra.as_chunks_mut::<4>();
+        for px in pixels {
             px.swap(0, 2);
         }
 
@@ -736,8 +737,9 @@ mod tests {
             .expect("NSCodec subcodec should decode");
 
         assert_eq!(pixels.len(), 192 * 64 * 4);
-        let black = pixels
-            .chunks_exact(4)
+        let (chunks, _) = pixels.as_chunks::<4>();
+        let black = chunks
+            .iter()
             .filter(|px| px[0] == 0 && px[1] == 0 && px[2] == 0)
             .count();
         assert!(

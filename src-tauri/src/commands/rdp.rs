@@ -596,7 +596,8 @@ where
                                     let start = (y as usize + row) * stride + x as usize * 4;
                                     let end = start + visible * 4;
                                     if end <= fb.len() {
-                                        for px in fb[start..end].chunks_exact_mut(4) {
+                                        let (pixels, _) = fb[start..end].as_chunks_mut::<4>();
+                                        for px in pixels {
                                             px.copy_from_slice(&rgba);
                                         }
                                     }
